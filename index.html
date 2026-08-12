@@ -348,8 +348,8 @@
     // intentionally separated so small pose-estimation noise cannot create reps.
     pushup: {
       type:'pose-rep', jointSet:['shoulder','elbow','wrist'],
-      downT:95, upT:155, minSane:45, smooth:0.22,
-      confirmDown:4, confirmUp:4, minRepMs:350, maxGapMs:1800,
+      downT:115, upT:145, minSane:45, smooth:0.18,
+      confirmDown:3, confirmUp:3, minRepMs:250, maxGapMs:1800,
       downMsg:'Chest low — press back up.', upMsg:'Arms extended. Nice rep.',
       formCheck(a,kpMap){
         if(a<45) return {warn:true,msg:'Very deep — keep the movement controlled.'};
@@ -441,6 +441,25 @@
     return rScore>=lScore ? {names:right,side:'right',score:rScore} : {names:left,side:'left',score:lScore};
   }
   function avgScore(kpMap,names){ return names.reduce((s,n)=>s+(kpMap[n]?kpMap[n].score:0),0)/names.length; }
+
+  // For pushups, use both elbows when possible. This is much more reliable
+  // from a front/3-quarter webcam view than committing to one side.
+  function bilateralElbowAngle(kpMap){
+    const vals=[];
+    [['left_shoulder','left_elbow','left_wrist'],
+     ['right_shoulder','right_elbow','right_wrist']].forEach(([a,b,c])=>{
+      if(kpMap[a]&&kpMap[b]&&kpMap[c]){
+        const score=(kpMap[a].score+kpMap[b].score+kpMap[c].score)/3;
+        if(score>=0.35){
+          const ang=angleOf(kpMap[a],kpMap[b],kpMap[c]);
+          if(ang!==null) vals.push(ang);
+        }
+      }
+    });
+    if(!vals.length) return null;
+    vals.sort((a,b)=>a-b);
+    return vals[Math.floor(vals.length/2)];
+  }
 
   // ---------------- DOM refs ----------------
   const video=document.getElementById('video'), canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
@@ -691,31 +710,44 @@
   }
 
   function processPoseRep(kpMap,b,trk){
-    // Lock to the best side once. This prevents left/right switching caused by
-    // frame-to-frame confidence changes.
-    const picked=pickSide(kpMap,trk.jointSet,WF.lockedSide);
-    if(!WF.lockedSide && picked.score>=0.55) WF.lockedSide=picked.side;
+    // Pushups are counted from the elbow angle. When both arms are visible,
+    // use the median of both elbows so a single noisy landmark cannot prevent
+    // the rep from being detected.
+    let angle, coreScore;
 
-    const side=WF.lockedSide || picked.side;
-    const [pA,pB,pC]=pickSide(kpMap,trk.jointSet,side).names;
-    const a=kpMap[pA], bb=kpMap[pB], c=kpMap[pC];
-    const coreScore=avgScore(kpMap,[pA,pB,pC]);
+    if(b.tracker==='pushup'){
+      angle=bilateralElbowAngle(kpMap);
+      const scores=[];
+      ['left','right'].forEach(side=>{
+        const names=[side+'_shoulder',side+'_elbow',side+'_wrist'];
+        const score=avgScore(kpMap,names);
+        if(score>=0.35) scores.push(score);
+      });
+      coreScore=scores.length ? Math.max(...scores) : 0;
+    }else{
+      const picked=pickSide(kpMap,trk.jointSet,WF.lockedSide);
+      if(!WF.lockedSide && picked.score>=0.55) WF.lockedSide=picked.side;
+      const side=WF.lockedSide || picked.side;
+      const [pA,pB,pC]=pickSide(kpMap,trk.jointSet,side).names;
+      const a=kpMap[pA], bb=kpMap[pB], c=kpMap[pC];
+      coreScore=avgScore(kpMap,[pA,pB,pC]);
+      angle=coreScore>=0.35 ? angleOf(a,bb,c) : null;
+    }
 
-    if(coreScore<0.35){
+    if(coreScore<0.35 || angle===null){
       setLed(trackLed,false);
       angleReadout.textContent='—';
-      setFeedback('Step back so your full body is visible.',false);
+      setFeedback('Step back so I can clearly see your arms and full body.',false);
       WF.downFrames=0; WF.upFrames=0;
       return;
     }
 
     setLed(trackLed,true);
-    const raw=angleOf(a,bb,c);
-    if(raw===null) return;
 
-    const s=trk.smooth||0.22;
-    WF.smoothedAngle = WF.smoothedAngle===null ? raw : (WF.smoothedAngle*(1-s)+raw*s);
-    const angle=WF.smoothedAngle;
+    // Slight smoothing removes MoveNet jitter without making normal reps laggy.
+    const s=trk.smooth||0.18;
+    WF.smoothedAngle = WF.smoothedAngle===null ? angle : (WF.smoothedAngle*(1-s)+angle*s);
+    angle=WF.smoothedAngle;
     angleReadout.textContent=Math.round(angle)+'°';
 
     const t = trk.invert
@@ -726,7 +758,6 @@
     const isDown = trk.invert ? angle>=trk.upT : angle<=trk.downT;
     const isUp   = trk.invert ? angle<=trk.downT : angle>=trk.upT;
 
-    // Require several consecutive frames before changing state.
     if(isDown){
       WF.downFrames++;
       WF.upFrames=0;
@@ -738,12 +769,14 @@
       WF.upFrames=Math.max(0,WF.upFrames-1);
     }
 
-    if(WF.repState==='up' && WF.downFrames>=trk.confirmDown){
+    const downNeeded=trk.confirmDown||3;
+    const upNeeded=trk.confirmUp||3;
+
+    if(WF.repState==='up' && WF.downFrames>=downNeeded){
       WF.repState='down';
       WF.downFrames=0;
       WF.upFrames=0;
       WF.repStartedAt=performance.now();
-      WF.lastTransitionAt=WF.repStartedAt;
       setFeedback(trk.downMsg,false);
 
       const fc=trk.formCheck ? trk.formCheck(angle,kpMap) : null;
@@ -754,12 +787,11 @@
       return;
     }
 
-    if(WF.repState==='down' && WF.upFrames>=trk.confirmUp){
+    if(WF.repState==='down' && WF.upFrames>=upNeeded){
       const now=performance.now();
       const elapsed=WF.repStartedAt ? now-WF.repStartedAt : Infinity;
 
-      // Reject a physically implausible instantaneous transition.
-      if(elapsed < (trk.minRepMs||350)){
+      if(elapsed < (trk.minRepMs||250)){
         WF.upFrames=0;
         return;
       }
@@ -767,7 +799,7 @@
       WF.repState='up';
       WF.downFrames=0;
       WF.upFrames=0;
-      WF.lastTransitionAt=now;
+      WF.repStartedAt=null;
       WF.repCount+=1;
       repCountEl.textContent=WF.repCount;
       setFeedback(trk.upMsg,false);
