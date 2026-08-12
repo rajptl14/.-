@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SPOTTER — AI Movement Coach</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js"></script>
+<style>
+  :root{
+    --bg:#0A0C09;
+    --panel:#14170F;
+    --panel-2:#1B1F14;
+    --line:#2A2E22;
+    --lime:#C9FF3E;
+    --lime-dim:#8FB82C;
+    --warn:#FF5A46;
+    --text:#EDEFE6;
+    --muted:#8B9186;
+    --mono: 'IBM Plex Mono', monospace;
+    --display: 'Bebas Neue', sans-serif;
+    --body: 'Inter', sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--body);
+    -webkit-font-smoothing:antialiased;}
+  body{min-height:100vh;}
+
+  .app{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
+
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;
+    flex-wrap:wrap;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
+  .brand{display:flex;align-items:baseline;gap:10px;}
+  .brand h1{font-family:var(--display);font-size:38px;letter-spacing:1px;margin:0;
+    color:var(--text);line-height:1;}
+  .brand .dot{color:var(--lime);}
+  .brand small{font-family:var(--mono);color:var(--muted);font-size:11px;letter-spacing:2px;
+    text-transform:uppercase;}
+
+  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;}
+  .tab{font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;
+    background:var(--panel);border:1px solid var(--line);color:var(--muted);
+    padding:9px 14px;border-radius:3px;cursor:pointer;transition:all .15s ease;}
+  .tab:hover{border-color:var(--lime-dim);color:var(--text);}
+  .tab.active{background:var(--lime);border-color:var(--lime);color:#0A0C09;font-weight:600;}
+
+  .grid{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;}
+  @media (max-width:860px){.grid{grid-template-columns:1fr;}}
+
+  .viewfinder{position:relative;background:#000;border-radius:6px;overflow:hidden;
+    aspect-ratio:4/3;border:1px solid var(--line);}
+  .viewfinder video, .viewfinder canvas{position:absolute;top:0;left:0;width:100%;height:100%;
+    object-fit:cover;}
+  .viewfinder video{transform:scaleX(-1);}
+  .viewfinder canvas{transform:scaleX(-1);}
+
+  /* corner bracket framing, camera-UI motif */
+  .bracket{position:absolute;width:26px;height:26px;border-color:var(--lime);
+    opacity:.85;pointer-events:none;z-index:5;}
+  .bracket.tl{top:14px;left:14px;border-top:2px solid;border-left:2px solid;}
+  .bracket.tr{top:14px;right:14px;border-top:2px solid;border-right:2px solid;}
+  .bracket.bl{bottom:14px;left:14px;border-bottom:2px solid;border-left:2px solid;}
+  .bracket.br{bottom:14px;right:14px;border-bottom:2px solid;border-right:2px solid;}
+
+  .vf-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    flex-direction:column;gap:14px;background:rgba(10,12,9,.72);z-index:6;text-align:center;padding:20px;}
+  .vf-overlay.hidden{display:none;}
+  .vf-overlay p{color:var(--muted);font-size:13px;max-width:320px;margin:0;}
+
+  .status-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;
+    margin-top:10px;flex-wrap:wrap;}
+  .status-left{display:flex;align-items:center;gap:14px;font-family:var(--mono);font-size:12px;color:var(--muted);}
+  .pill{display:flex;align-items:center;gap:6px;}
+  .led{width:8px;height:8px;border-radius:50%;background:#444;}
+  .led.on{background:var(--lime);box-shadow:0 0 8px var(--lime);}
+  .led.warn{background:var(--warn);box-shadow:0 0 8px var(--warn);}
+
+  button.primary{font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;
+    background:var(--lime);color:#0A0C09;border:none;padding:11px 20px;border-radius:3px;
+    cursor:pointer;font-weight:700;transition:transform .1s ease;}
+  button.primary:hover{transform:translateY(-1px);}
+  button.primary:active{transform:translateY(0);}
+  button.primary.stop{background:var(--warn);}
+  button.ghost{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;
+    background:transparent;color:var(--muted);border:1px solid var(--line);padding:8px 12px;
+    border-radius:3px;cursor:pointer;}
+  button.ghost:hover{color:var(--text);border-color:var(--lime-dim);}
+
+  .sidebar{display:flex;flex-direction:column;gap:14px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px;}
+  .card h2{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;
+    color:var(--muted);margin:0 0 14px;}
+
+  /* rep dial - signature element */
+  .dial-wrap{display:flex;align-items:center;justify-content:center;position:relative;}
+  .dial-wrap svg{width:100%;max-width:220px;}
+  .dial-count{position:absolute;text-align:center;}
+  .dial-count .num{font-family:var(--display);font-size:56px;line-height:1;color:var(--text);}
+  .dial-count .lbl{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);
+    text-transform:uppercase;margin-top:2px;}
+
+  .metric-row{display:flex;justify-content:space-between;align-items:center;
+    font-family:var(--mono);font-size:12px;color:var(--muted);padding:7px 0;
+    border-bottom:1px solid var(--line);}
+  .metric-row:last-child{border-bottom:none;}
+  .metric-row span.v{color:var(--text);font-weight:600;}
+
+  .feedback{font-size:14px;line-height:1.5;min-height:44px;display:flex;align-items:center;gap:10px;}
+  .feedback .ic{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--lime);}
+  .feedback.warn .ic{background:var(--warn);}
+  .feedback.warn{color:#FFD9D2;}
+
+  .reset-row{display:flex;gap:8px;margin-top:12px;}
+
+  footer{margin-top:26px;font-family:var(--mono);font-size:11px;color:var(--muted);
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
+  footer a{color:var(--muted);}
+
+  @media (prefers-reduced-motion: reduce){
+    button.primary, .tab{transition:none;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="brand">
+      <h1>SPOTTER<span class="dot">.</span></h1>
+      <small>vision-tracked rep coach</small>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button class="tab active" data-ex="squat">Squat</button>
+      <button class="tab" data-ex="curl">Bicep Curl</button>
+      <button class="tab" data-ex="pushup">Push-Up</button>
+      <button class="tab" data-ex="jj">Jumping Jack</button>
+    </nav>
+  </header>
+
+  <div class="grid">
+    <div>
+      <div class="viewfinder" id="viewfinder">
+        <video id="video" playsinline muted></video>
+        <canvas id="canvas"></canvas>
+        <div class="bracket tl"></div>
+        <div class="bracket tr"></div>
+        <div class="bracket bl"></div>
+        <div class="bracket br"></div>
+        <div class="vf-overlay" id="vfOverlay">
+          <p id="overlayText">Turn on your camera and step back so your whole body is in frame. SPOTTER tracks 17 body points to count reps and check your form.</p>
+          <button class="primary" id="startBtn">Start Camera</button>
+        </div>
+      </div>
+
+      <div class="status-strip">
+        <div class="status-left">
+          <div class="pill"><span class="led" id="camLed"></span> Camera</div>
+          <div class="pill"><span class="led" id="trackLed"></span> Tracking</div>
+          <div class="pill">Angle <span id="angleReadout" style="color:var(--text)">—</span></div>
+        </div>
+        <button class="ghost" id="toggleBtn">Stop</button>
+      </div>
+    </div>
+
+    <div class="sidebar">
+      <div class="card">
+        <h2>Reps — <span id="exLabel">Squat</span></h2>
+        <div class="dial-wrap">
+          <svg viewBox="0 0 200 200">
+            <circle cx="100" cy="100" r="86" fill="none" stroke="var(--line)" stroke-width="10"/>
+            <circle cx="100" cy="100" r="86" fill="none" stroke="var(--lime)" stroke-width="10"
+              stroke-linecap="round" id="dialArc"
+              stroke-dasharray="540.35" stroke-dashoffset="540.35"
+              transform="rotate(-90 100 100)"/>
+          </svg>
+          <div class="dial-count">
+            <div class="num" id="repCount">0</div>
+            <div class="lbl">reps</div>
+          </div>
+        </div>
+        <div class="reset-row">
+          <button class="ghost" id="resetBtn" style="flex:1">Reset Count</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Form Feedback</h2>
+        <div class="feedback" id="feedback"><span class="ic"></span><span id="feedbackText">Waiting for tracking to begin…</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Session</h2>
+        <div class="metric-row"><span>State</span><span class="v" id="stateVal">idle</span></div>
+        <div class="metric-row"><span>Best angle (min)</span><span class="v" id="minAngleVal">—</span></div>
+        <div class="metric-row"><span>Best angle (max)</span><span class="v" id="maxAngleVal">—</span></div>
+        <div class="metric-row"><span>Model</span><span class="v">MoveNet Lightning</span></div>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>All pose tracking runs locally in your browser — no video leaves your device.</span>
+    <span>Not a substitute for in-person coaching. Stop if you feel pain.</span>
+  </footer>
+</div>
+
+<script>
+(function(){
+  const video = document.getElementById('video');
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  const startBtn = document.getElementById('startBtn');
+  const toggleBtn = document.getElementById('toggleBtn');
+  const resetBtn = document.getElementById('resetBtn');
+  const vfOverlay = document.getElementById('vfOverlay');
+  const overlayText = document.getElementById('overlayText');
+  const camLed = document.getElementById('camLed');
+  const trackLed = document.getElementById('trackLed');
+  const angleReadout = document.getElementById('angleReadout');
+  const repCountEl = document.getElementById('repCount');
+  const dialArc = document.getElementById('dialArc');
+  const feedbackBox = document.getElementById('feedback');
+  const feedbackText = document.getElementById('feedbackText');
+  const stateVal = document.getElementById('stateVal');
+  const minAngleVal = document.getElementById('minAngleVal');
+  const maxAngleVal = document.getElementById('maxAngleVal');
+  const exLabel = document.getElementById('exLabel');
+  const tabs = document.querySelectorAll('.tab');
+
+  const DIAL_CIRC = 540.35;
+
+  const KP = ['nose','left_eye','right_eye','left_ear','right_ear','left_shoulder','right_shoulder',
+    'left_elbow','right_elbow','left_wrist','right_wrist','left_hip','right_hip',
+    'left_knee','right_knee','left_ankle','right_ankle'];
+
+  const CONNECTIONS = [
+    ['left_shoulder','right_shoulder'],['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
+    ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
+    ['left_shoulder','left_hip'],['right_shoulder','right_hip'],['left_hip','right_hip'],
+    ['left_hip','left_knee'],['left_knee','left_ankle'],['right_hip','right_knee'],['right_knee','right_ankle']
+  ];
+
+  // Exercise definitions: which three joints form the tracked angle, and rep thresholds.
+  const EXERCISES = {
+    squat: {
+      label:'Squat', jointSet:['hip','knee','ankle'],
+      downT:100, upT:160, minSane:55,
+      downMsg:'Nice depth — drive back up through your heels.',
+      upMsg:'Good rep. Reset your stance and go again.',
+      formCheck(a){
+        if(a < 55) return {warn:true, msg:'That\'s very deep — control the descent, don\'t bounce.'};
+        return null;
+      }
+    },
+    curl: {
+      label:'Bicep Curl', jointSet:['shoulder','elbow','wrist'],
+      downT:60, upT:150, minSane:25, invert:true,
+      downMsg:'Full contraction — squeeze at the top.',
+      upMsg:'Arm extended. Keep your elbow pinned to your side.',
+      formCheck(a){ return null; }
+    },
+    pushup: {
+      label:'Push-Up', jointSet:['shoulder','elbow','wrist'],
+      downT:95, upT:155, minSane:45,
+      downMsg:'Chest low — now press away from the floor.',
+      upMsg:'Arms locked out. Keep your core tight on the way down.',
+      formCheck(a){
+        if(a < 45) return {warn:true, msg:'Careful — that\'s a very deep bend on the elbow.'};
+        return null;
+      }
+    },
+    jj: {
+      label:'Jumping Jack', jointSet:['hip','shoulder','wrist'],
+      downT:40, upT:100, minSane:10, invert:true,
+      downMsg:'Arms down — feet together.',
+      upMsg:'Arms overhead — nice and wide.',
+      formCheck(a){ return null; }
+    }
+  };
+
+  let currentExKey = 'squat';
+  let model = null;
+  let running = false;
+  let rafId = null;
+  let repCount = 0;
+  let repState = 'up'; // 'up' | 'down'
+  let smoothedAngle = null;
+  let minSeen = Infinity, maxSeen = -Infinity;
+  let lastFeedbackAt = 0;
+
+  function setLed(el, on, warnMode){
+    el.classList.toggle('on', !!on && !warnMode);
+    el.classList.toggle('warn', !!warnMode);
+  }
+
+  function angleOf(a,b,c){
+    // b is the vertex
+    const ab = {x:a.x-b.x, y:a.y-b.y};
+    const cb = {x:c.x-b.x, y:c.y-b.y};
+    const dot = ab.x*cb.x + ab.y*cb.y;
+    const magAB = Math.hypot(ab.x,ab.y);
+    const magCB = Math.hypot(cb.x,cb.y);
+    if(magAB < 1e-6 || magCB < 1e-6) return null;
+    let cos = dot/(magAB*magCB);
+    cos = Math.min(1, Math.max(-1, cos));
+    return Math.acos(cos) * 180 / Math.PI;
+  }
+
+  function pickSide(kpMap, base){
+    // Prefer whichever side (left/right) has higher average confidence.
+    const left = ['left_'+base[0], 'left_'+base[1], 'left_'+base[2]];
+    const right = ['right_'+base[0], 'right_'+base[1], 'right_'+base[2]];
+    const lScore = left.reduce((s,k)=> s + (kpMap[k]?kpMap[k].score:0), 0);
+    const rScore = right.reduce((s,k)=> s + (kpMap[k]?kpMap[k].score:0), 0);
+    return rScore >= lScore ? right : left;
+  }
+
+  async function initModel(){
+    await tf.ready();
+    try{ await tf.setBackend('webgl'); }catch(e){ await tf.setBackend('cpu'); }
+    model = await tf.loadGraphModel(
+      'https://tfhub.dev/google/tfjs-model/movenet/singlepose/lightning/4',
+      {fromTFHub:true}
+    );
+  }
+
+  async function startCamera(){
+    overlayText.textContent = 'Requesting camera access…';
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false});
+      video.srcObject = stream;
+      await video.play();
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      setLed(camLed, true);
+      if(!model){
+        overlayText.textContent = 'Loading pose model…';
+        await initModel();
+      }
+      vfOverlay.classList.add('hidden');
+      running = true;
+      toggleBtn.textContent = 'Stop';
+      toggleBtn.classList.remove('stop');
+      loop();
+    }catch(err){
+      overlayText.textContent = 'Could not access camera: ' + err.message + '. Check your browser permissions and try again.';
+      setLed(camLed, false, true);
+    }
+  }
+
+  function stopCamera(){
+    running = false;
+    if(rafId) cancelAnimationFrame(rafId);
+    const stream = video.srcObject;
+    if(stream){ stream.getTracks().forEach(t=>t.stop()); }
+    video.srcObject = null;
+    setLed(camLed, false);
+    setLed(trackLed, false);
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    vfOverlay.classList.remove('hidden');
+    overlayText.textContent = 'Camera stopped. Start again when you\'re ready.';
+    toggleBtn.textContent = 'Start';
+  }
+
+  async function estimatePose(){
+    const input = tf.tidy(()=>{
+      let img = tf.browser.fromPixels(video);
+      img = tf.image.resizeBilinear(img, [192,192]);
+      img = img.expandDims(0);
+      return tf.cast(img, 'int32');
+    });
+    const output = model.execute(input);
+    const arr = await output.array();
+    input.dispose();
+    output.dispose();
+
+    const raw = arr[0][0]; // [17][3] -> y,x,score
+    const kpMap = {};
+    for(let i=0;i<17;i++){
+      const [y,x,score] = raw[i];
+      kpMap[KP[i]] = {x: x*video.videoWidth, y: y*video.videoHeight, score};
+    }
+    return kpMap;
+  }
+
+  function drawSkeleton(kpMap){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.lineWidth = 3;
+    CONNECTIONS.forEach(([a,b])=>{
+      const pa = kpMap[a], pb = kpMap[b];
+      if(pa && pb && pa.score>0.35 && pb.score>0.35){
+        ctx.strokeStyle = 'rgba(201,255,62,0.75)';
+        ctx.beginPath();
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+        ctx.stroke();
+      }
+    });
+    KP.forEach(k=>{
+      const p = kpMap[k];
+      if(p && p.score>0.35){
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
+        ctx.fillStyle = '#EDEFE6';
+        ctx.fill();
+      }
+    });
+  }
+
+  function avgScore(kpMap, names){
+    return names.reduce((s,n)=> s + (kpMap[n]?kpMap[n].score:0), 0) / names.length;
+  }
+
+  function setFeedback(msg, warn){
+    feedbackText.textContent = msg;
+    feedbackBox.classList.toggle('warn', !!warn);
+  }
+
+  function updateDial(angle, ex){
+    // Map angle progress between downT and upT to a 0-1 fill, direction-aware.
+    let t;
+    if(ex.invert){
+      t = (angle - ex.downT) / (ex.upT - ex.downT);
+    }else{
+      t = (ex.upT - angle) / (ex.upT - ex.downT);
+    }
+    t = Math.min(1, Math.max(0, t));
+    dialArc.setAttribute('stroke-dashoffset', String(DIAL_CIRC * (1 - t)));
+  }
+
+  function processExercise(kpMap){
+    const ex = EXERCISES[currentExKey];
+    const [pA, pB, pC] = pickSide(kpMap, ex.jointSet);
+    const a = kpMap[pA], b = kpMap[pB], c = kpMap[pC];
+    const coreScore = avgScore(kpMap, [pA,pB,pC]);
+
+    if(coreScore < 0.35){
+      setLed(trackLed, false);
+      angleReadout.textContent = '—';
+      setFeedback('Step back so your full body is visible to the camera.', false);
+      return;
+    }
+    setLed(trackLed, true);
+
+    const raw = angleOf(a,b,c);
+    if(raw === null) return;
+    smoothedAngle = smoothedAngle === null ? raw : (smoothedAngle*0.72 + raw*0.28);
+    const angle = smoothedAngle;
+
+    angleReadout.textContent = Math.round(angle) + '°';
+    minSeen = Math.min(minSeen, angle);
+    maxSeen = Math.max(maxSeen, angle);
+    minAngleVal.textContent = isFinite(minSeen) ? Math.round(minSeen)+'°' : '—';
+    maxAngleVal.textContent = isFinite(maxSeen) ? Math.round(maxSeen)+'°' : '—';
+
+    updateDial(angle, ex);
+
+    const isDownState = ex.invert ? (angle <= ex.downT) : (angle <= ex.downT);
+    const isUpState = ex.invert ? (angle >= ex.upT) : (angle >= ex.upT);
+
+    if(repState === 'up' && isDownState){
+      repState = 'down';
+      stateVal.textContent = 'down';
+      setFeedback(ex.downMsg, false);
+      const fc = ex.formCheck(angle);
+      if(fc && fc.warn) setFeedback(fc.msg, true);
+    }else if(repState === 'down' && isUpState){
+      repState = 'up';
+      stateVal.textContent = 'up';
+      repCount += 1;
+      repCountEl.textContent = repCount;
+      setFeedback(ex.upMsg, false);
+      pulseDial();
+    }
+  }
+
+  function pulseDial(){
+    dialArc.style.filter = 'drop-shadow(0 0 6px rgba(201,255,62,0.9))';
+    setTimeout(()=>{ dialArc.style.filter = ''; }, 220);
+  }
+
+  async function loop(){
+    if(!running) return;
+    if(video.readyState >= 2){
+      const kpMap = await estimatePose();
+      drawSkeleton(kpMap);
+      processExercise(kpMap);
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  function resetSession(){
+    repCount = 0;
+    repState = 'up';
+    minSeen = Infinity; maxSeen = -Infinity;
+    smoothedAngle = null;
+    repCountEl.textContent = '0';
+    minAngleVal.textContent = '—';
+    maxAngleVal.textContent = '—';
+    dialArc.setAttribute('stroke-dashoffset', String(DIAL_CIRC));
+    stateVal.textContent = 'idle';
+    setFeedback('Waiting for tracking to begin…', false);
+  }
+
+  startBtn.addEventListener('click', startCamera);
+  toggleBtn.addEventListener('click', ()=>{
+    if(running){ stopCamera(); } else { startCamera(); }
+  });
+  resetBtn.addEventListener('click', resetSession);
+
+  tabs.forEach(tab=>{
+    tab.addEventListener('click', ()=>{
+      tabs.forEach(t=>t.classList.remove('active'));
+      tab.classList.add('active');
+      currentExKey = tab.dataset.ex;
+      exLabel.textContent = EXERCISES[currentExKey].label;
+      resetSession();
+    });
+  });
+
+  // initial dial state
+  dialArc.setAttribute('stroke-dashoffset', String(DIAL_CIRC));
+})();
+</script>
+</body>
+</html>
