@@ -344,28 +344,61 @@
 
   // ---------------- Tracker configs (pose-based) ----------------
   const TRACKERS = {
-    pushup: {type:'pose-rep', jointSet:['shoulder','elbow','wrist'], downT:95, upT:155, minSane:45, smooth:0.28,
+    // Rep tracking uses hysteresis + frame confirmation. The thresholds are
+    // intentionally separated so small pose-estimation noise cannot create reps.
+    pushup: {
+      type:'pose-rep', jointSet:['shoulder','elbow','wrist'],
+      downT:95, upT:155, minSane:45, smooth:0.22,
+      confirmDown:4, confirmUp:4, minRepMs:350, maxGapMs:1800,
       downMsg:'Chest low — press back up.', upMsg:'Arms extended. Nice rep.',
       formCheck(a,kpMap){
-        if(a<45) return {warn:true,msg:'Careful — very deep on the elbow.'};
-        const S=avgPt2(kpMap,'left_shoulder','right_shoulder'), H=avgPt2(kpMap,'left_hip','right_hip'), An=avgPt2(kpMap,'left_ankle','right_ankle');
-        if(S&&H&&An){ const dev=hipLineDeviation(S,H,An);
-          if(dev>0.12) return {warn:true,msg:'Hips are sagging — brace your core.'};
-          if(dev<-0.12) return {warn:true,msg:'Hips piked too high — flatten your line.'};
-        } return null;
-      }},
-    squat: {type:'pose-rep', jointSet:['hip','knee','ankle'], downT:100, upT:160, minSane:55, smooth:0.28,
+        if(a<45) return {warn:true,msg:'Very deep — keep the movement controlled.'};
+        const S=avgPt2(kpMap,'left_shoulder','right_shoulder');
+        const H=avgPt2(kpMap,'left_hip','right_hip');
+        const An=avgPt2(kpMap,'left_ankle','right_ankle');
+        if(S&&H&&An){
+          const dev=hipLineDeviation(S,H,An);
+          if(dev>0.10) return {warn:true,msg:'Hips are sagging — brace your core.'};
+          if(dev<-0.10) return {warn:true,msg:'Hips are piked too high — flatten your line.'};
+        }
+        return null;
+      }
+    },
+    squat: {
+      type:'pose-rep', jointSet:['hip','knee','ankle'],
+      downT:100, upT:160, minSane:55, smooth:0.22,
+      confirmDown:4, confirmUp:4, minRepMs:350, maxGapMs:2200,
       downMsg:'Good depth — drive up.', upMsg:'Standing tall. Nice rep.',
-      formCheck(a){ if(a<55) return {warn:true,msg:'Very deep — control it, don\'t bounce.'}; return null; }},
-    pullup: {type:'pose-rep', jointSet:['shoulder','elbow','wrist'], downT:70, upT:160, invert:true, minSane:25, smooth:0.3,
-      downMsg:'Good pull — chin up.', upMsg:'Full extension. Nice rep.', formCheck(){return null;}},
-    row: {type:'pose-rep', jointSet:['shoulder','elbow','wrist'], downT:70, upT:160, invert:true, minSane:25, smooth:0.3,
-      downMsg:'Squeeze at the top of the pull.', upMsg:'Arms extended. Nice rep.', formCheck(){return null;}},
-    dip: {type:'pose-rep', jointSet:['shoulder','elbow','wrist'], downT:90, upT:160, minSane:40, smooth:0.3,
+      formCheck(a){ if(a<55) return {warn:true,msg:'Very deep — control it, don\'t bounce.'}; return null; }
+    },
+    pullup: {
+      type:'pose-rep', jointSet:['shoulder','elbow','wrist'],
+      downT:70, upT:160, invert:true, minSane:25, smooth:0.22,
+      confirmDown:4, confirmUp:4, minRepMs:400, maxGapMs:2500,
+      downMsg:'Good pull — chin up.', upMsg:'Full extension. Nice rep.',
+      formCheck(){return null;}
+    },
+    row: {
+      type:'pose-rep', jointSet:['shoulder','elbow','wrist'],
+      downT:70, upT:160, invert:true, minSane:25, smooth:0.22,
+      confirmDown:4, confirmUp:4, minRepMs:350, maxGapMs:2200,
+      downMsg:'Squeeze at the top of the pull.', upMsg:'Arms extended. Nice rep.',
+      formCheck(){return null;}
+    },
+    dip: {
+      type:'pose-rep', jointSet:['shoulder','elbow','wrist'],
+      downT:90, upT:160, minSane:40, smooth:0.22,
+      confirmDown:4, confirmUp:4, minRepMs:350, maxGapMs:2200,
       downMsg:'Good depth — press to lockout.', upMsg:'Locked out. Nice rep.',
-      formCheck(a){ if(a<40) return {warn:true,msg:'That\'s deep on the shoulders — ease up if needed.'}; return null; }},
-    situp: {type:'pose-rep', jointSet:['shoulder','hip','knee'], downT:100, upT:150, minSane:55, smooth:0.32,
-      downMsg:'Nice crunch.', upMsg:'Back down. Nice rep.', formCheck(){return null;}},
+      formCheck(a){ if(a<40) return {warn:true,msg:'That\'s deep on the shoulders — ease up if needed.'}; return null; }
+    },
+    situp: {
+      type:'pose-rep', jointSet:['shoulder','hip','knee'],
+      downT:100, upT:150, minSane:55, smooth:0.22,
+      confirmDown:4, confirmUp:4, minRepMs:350, maxGapMs:2200,
+      downMsg:'Nice crunch.', upMsg:'Back down. Nice rep.',
+      formCheck(){return null;}
+    },
     hold: {type:'hold'},
     manual: {type:'manual'}
   };
@@ -396,10 +429,16 @@
     const bodyLen=Math.hypot(ankle.x-shoulder.x,ankle.y-shoulder.y)||1;
     return (hip.y-expectedY)/bodyLen;
   }
-  function pickSide(kpMap, base){
-    const left=['left_'+base[0],'left_'+base[1],'left_'+base[2]], right=['right_'+base[0],'right_'+base[1],'right_'+base[2]];
-    const lScore=left.reduce((s,k)=>s+(kpMap[k]?kpMap[k].score:0),0), rScore=right.reduce((s,k)=>s+(kpMap[k]?kpMap[k].score:0),0);
-    return rScore>=lScore?right:left;
+  function pickSide(kpMap, base, lockedSide){
+    const makeSide = side => base.map(part => side+'_'+part);
+    if(lockedSide){
+      const names=makeSide(lockedSide);
+      const score=avgScore(kpMap,names);
+      if(score>=0.30) return {names,side:lockedSide,score};
+    }
+    const left=makeSide('left'), right=makeSide('right');
+    const lScore=avgScore(kpMap,left), rScore=avgScore(kpMap,right);
+    return rScore>=lScore ? {names:right,side:'right',score:rScore} : {names:left,side:'left',score:lScore};
   }
   function avgScore(kpMap,names){ return names.reduce((s,n)=>s+(kpMap[n]?kpMap[n].score:0),0)/names.length; }
 
@@ -503,7 +542,13 @@
   }
 
   // ---------------- Workout flow state ----------------
-  const WF = { day:null, blocks:[], idx:0, phase:'idle', log:[], smoothedAngle:null, repState:'up', repCount:0, holdMs:0, holdLastTick:null, restRemaining:0, restTimerId:null };
+  const WF = {
+    day:null, blocks:[], idx:0, phase:'idle', log:[],
+    smoothedAngle:null, repState:'up', repCount:0,
+    lockedSide:null, downFrames:0, upFrames:0,
+    repStartedAt:null, lastTransitionAt:null,
+    holdMs:0, holdLastTick:null, restRemaining:0, restTimerId:null
+  };
 
   function buildBlocks(dayKey){
     const day=PROGRAM[dayKey]; const blocks=[];
@@ -606,7 +651,16 @@
   function beginBlock(idx){
     if(idx>=WF.blocks.length){ finishWorkout(); return; }
     WF.idx=idx; WF.phase='active';
-    WF.smoothedAngle=null; WF.repState='up'; WF.repCount=0; WF.holdMs=0; WF.holdLastTick=null;
+    WF.smoothedAngle=null;
+    WF.repState='up';
+    WF.repCount=0;
+    WF.lockedSide=null;
+    WF.downFrames=0;
+    WF.upFrames=0;
+    WF.repStartedAt=null;
+    WF.lastTransitionAt=null;
+    WF.holdMs=0;
+    WF.holdLastTick=null;
     restOverlay.classList.add('hidden');
 
     const b=WF.blocks[idx];
@@ -637,30 +691,91 @@
   }
 
   function processPoseRep(kpMap,b,trk){
-    const [pA,pB,pC]=pickSide(kpMap,trk.jointSet);
+    // Lock to the best side once. This prevents left/right switching caused by
+    // frame-to-frame confidence changes.
+    const picked=pickSide(kpMap,trk.jointSet,WF.lockedSide);
+    if(!WF.lockedSide && picked.score>=0.55) WF.lockedSide=picked.side;
+
+    const side=WF.lockedSide || picked.side;
+    const [pA,pB,pC]=pickSide(kpMap,trk.jointSet,side).names;
     const a=kpMap[pA], bb=kpMap[pB], c=kpMap[pC];
     const coreScore=avgScore(kpMap,[pA,pB,pC]);
-    if(coreScore<0.35){ setLed(trackLed,false); angleReadout.textContent='—'; setFeedback('Step back so your full body is visible.',false); return; }
+
+    if(coreScore<0.35){
+      setLed(trackLed,false);
+      angleReadout.textContent='—';
+      setFeedback('Step back so your full body is visible.',false);
+      WF.downFrames=0; WF.upFrames=0;
+      return;
+    }
+
     setLed(trackLed,true);
-    const raw=angleOf(a,bb,c); if(raw===null) return;
-    const s=trk.smooth||0.28;
+    const raw=angleOf(a,bb,c);
+    if(raw===null) return;
+
+    const s=trk.smooth||0.22;
     WF.smoothedAngle = WF.smoothedAngle===null ? raw : (WF.smoothedAngle*(1-s)+raw*s);
     const angle=WF.smoothedAngle;
     angleReadout.textContent=Math.round(angle)+'°';
 
-    const t = trk.invert ? (angle-trk.downT)/(trk.upT-trk.downT) : (trk.upT-angle)/(trk.upT-trk.downT);
+    const t = trk.invert
+      ? (angle-trk.downT)/(trk.upT-trk.downT)
+      : (trk.upT-angle)/(trk.upT-trk.downT);
     updateDial(t);
 
-    const isDownState = angle<=trk.downT, isUpState = angle>=trk.upT;
-    if(WF.repState==='up' && isDownState){
-      WF.repState='down'; setFeedback(trk.downMsg,false);
+    const isDown = trk.invert ? angle>=trk.upT : angle<=trk.downT;
+    const isUp   = trk.invert ? angle<=trk.downT : angle>=trk.upT;
+
+    // Require several consecutive frames before changing state.
+    if(isDown){
+      WF.downFrames++;
+      WF.upFrames=0;
+    }else if(isUp){
+      WF.upFrames++;
+      WF.downFrames=0;
+    }else{
+      WF.downFrames=Math.max(0,WF.downFrames-1);
+      WF.upFrames=Math.max(0,WF.upFrames-1);
+    }
+
+    if(WF.repState==='up' && WF.downFrames>=trk.confirmDown){
+      WF.repState='down';
+      WF.downFrames=0;
+      WF.upFrames=0;
+      WF.repStartedAt=performance.now();
+      WF.lastTransitionAt=WF.repStartedAt;
+      setFeedback(trk.downMsg,false);
+
       const fc=trk.formCheck ? trk.formCheck(angle,kpMap) : null;
-      if(fc && fc.warn){ setFeedback(fc.msg,true); speak(fc.msg,{priority:true}); }
-    }else if(WF.repState==='down' && isUpState){
-      WF.repState='up'; WF.repCount+=1; repCountEl.textContent=WF.repCount;
-      setFeedback(trk.upMsg,false); pulseDial(); announceRep(WF.repCount);
+      if(fc && fc.warn){
+        setFeedback(fc.msg,true);
+        speak(fc.msg,{priority:true});
+      }
+      return;
+    }
+
+    if(WF.repState==='down' && WF.upFrames>=trk.confirmUp){
+      const now=performance.now();
+      const elapsed=WF.repStartedAt ? now-WF.repStartedAt : Infinity;
+
+      // Reject a physically implausible instantaneous transition.
+      if(elapsed < (trk.minRepMs||350)){
+        WF.upFrames=0;
+        return;
+      }
+
+      WF.repState='up';
+      WF.downFrames=0;
+      WF.upFrames=0;
+      WF.lastTransitionAt=now;
+      WF.repCount+=1;
+      repCountEl.textContent=WF.repCount;
+      setFeedback(trk.upMsg,false);
+      pulseDial();
+      announceRep(WF.repCount);
+
       if(b.target.type==='reps' && WF.repCount>=b.target.max){
-        speak('That\'s your set.',{priority:true});
+        speak('That’s your set.',{priority:true});
         setTimeout(()=>completeCurrentSet(),400);
       }
     }
