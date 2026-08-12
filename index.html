@@ -3,128 +3,141 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SPOTTER — AI Movement Coach</title>
+<title>SPOTTER — Calisthenics Coach</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tensorflow/4.10.0/tf.min.js"></script>
 <style>
   :root{
-    --bg:#0A0C09;
-    --panel:#14170F;
-    --panel-2:#1B1F14;
-    --line:#2A2E22;
-    --lime:#C9FF3E;
-    --lime-dim:#8FB82C;
-    --warn:#FF5A46;
-    --text:#EDEFE6;
-    --muted:#8B9186;
-    --mono: 'IBM Plex Mono', monospace;
-    --display: 'Bebas Neue', sans-serif;
-    --body: 'Inter', sans-serif;
+    --bg:#0A0C09; --panel:#14170F; --panel-2:#1B1F14; --line:#2A2E22;
+    --lime:#C9FF3E; --lime-dim:#8FB82C; --warn:#FF5A46;
+    --text:#EDEFE6; --muted:#8B9186;
+    --mono:'IBM Plex Mono', monospace; --display:'Bebas Neue', sans-serif; --body:'Inter', sans-serif;
   }
   *{box-sizing:border-box;}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--body);
-    -webkit-font-smoothing:antialiased;}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--body);-webkit-font-smoothing:antialiased;}
   body{min-height:100vh;}
-
   .app{max-width:1180px;margin:0 auto;padding:24px 20px 60px;}
-
-  header{display:flex;align-items:center;justify-content:space-between;gap:16px;
-    flex-wrap:wrap;margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+    margin-bottom:22px;border-bottom:1px solid var(--line);padding-bottom:18px;}
   .brand{display:flex;align-items:baseline;gap:10px;}
-  .brand h1{font-family:var(--display);font-size:38px;letter-spacing:1px;margin:0;
-    color:var(--text);line-height:1;}
+  .brand h1{font-family:var(--display);font-size:38px;letter-spacing:1px;margin:0;line-height:1;}
   .brand .dot{color:var(--lime);}
-  .brand small{font-family:var(--mono);color:var(--muted);font-size:11px;letter-spacing:2px;
-    text-transform:uppercase;}
+  .brand small{font-family:var(--mono);color:var(--muted);font-size:11px;letter-spacing:2px;text-transform:uppercase;}
+  .hidden{display:none !important;}
 
-  nav.tabs{display:flex;gap:6px;flex-wrap:wrap;}
-  .tab{font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;
-    background:var(--panel);border:1px solid var(--line);color:var(--muted);
-    padding:9px 14px;border-radius:3px;cursor:pointer;transition:all .15s ease;}
-  .tab:hover{border-color:var(--lime-dim);color:var(--text);}
-  .tab.active{background:var(--lime);border-color:var(--lime);color:#0A0C09;font-weight:600;}
+  /* Day picker */
+  .day-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-bottom:20px;}
+  @media (max-width:760px){.day-grid{grid-template-columns:1fr;}}
+  .day-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:18px;cursor:pointer;
+    transition:border-color .15s ease, transform .1s ease;}
+  .day-card:hover{border-color:var(--lime-dim);}
+  .day-card.selected{border-color:var(--lime);background:var(--panel-2);}
+  .day-card .dlabel{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
+  .day-card .dtitle{font-family:var(--display);font-size:26px;margin:4px 0 10px;letter-spacing:.5px;}
+  .day-card ul{margin:0;padding:0;list-style:none;font-size:12px;color:var(--muted);line-height:1.9;}
+  .day-card ul b{color:var(--text);font-weight:600;}
 
+  .start-row{display:flex;justify-content:center;margin:22px 0 6px;}
+  button.primary{font-family:var(--mono);font-size:13px;letter-spacing:1px;text-transform:uppercase;
+    background:var(--lime);color:#0A0C09;border:none;padding:13px 26px;border-radius:4px;
+    cursor:pointer;font-weight:700;transition:transform .1s ease;}
+  button.primary:hover{transform:translateY(-1px);}
+  button.primary:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+  button.ghost{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;
+    background:transparent;color:var(--muted);border:1px solid var(--line);padding:9px 14px;
+    border-radius:4px;cursor:pointer;}
+  button.ghost:hover{color:var(--text);border-color:var(--lime-dim);}
+  button.tap-btn{width:100%;font-family:var(--display);font-size:22px;letter-spacing:1px;
+    background:var(--lime);color:#0A0C09;border:none;padding:16px;border-radius:6px;cursor:pointer;}
+  button.tap-btn:active{transform:scale(.98);}
+
+  /* Workout stage */
   .grid{display:grid;grid-template-columns:1.55fr 1fr;gap:18px;}
   @media (max-width:860px){.grid{grid-template-columns:1fr;}}
-
-  .viewfinder{position:relative;background:#000;border-radius:6px;overflow:hidden;
-    aspect-ratio:4/3;border:1px solid var(--line);}
-  .viewfinder video, .viewfinder canvas{position:absolute;top:0;left:0;width:100%;height:100%;
-    object-fit:cover;}
-  .viewfinder video{transform:scaleX(-1);}
-  .viewfinder canvas{transform:scaleX(-1);}
-
-  /* corner bracket framing, camera-UI motif */
-  .bracket{position:absolute;width:26px;height:26px;border-color:var(--lime);
-    opacity:.85;pointer-events:none;z-index:5;}
+  .viewfinder{position:relative;background:#000;border-radius:6px;overflow:hidden;aspect-ratio:4/3;border:1px solid var(--line);}
+  .viewfinder video,.viewfinder canvas{position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;}
+  .viewfinder video{transform:scaleX(-1);} .viewfinder canvas{transform:scaleX(-1);}
+  .bracket{position:absolute;width:26px;height:26px;border-color:var(--lime);opacity:.85;pointer-events:none;z-index:5;}
   .bracket.tl{top:14px;left:14px;border-top:2px solid;border-left:2px solid;}
   .bracket.tr{top:14px;right:14px;border-top:2px solid;border-right:2px solid;}
   .bracket.bl{bottom:14px;left:14px;border-bottom:2px solid;border-left:2px solid;}
   .bracket.br{bottom:14px;right:14px;border-bottom:2px solid;border-right:2px solid;}
+
+  .stage-header{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:8px;margin-bottom:10px;}
+  .stage-header .section-eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:2px;color:var(--lime);text-transform:uppercase;}
+  .stage-header h2{font-family:var(--display);font-size:32px;margin:2px 0 0;letter-spacing:.5px;}
+  .stage-header .set-label{font-family:var(--mono);font-size:12px;color:var(--muted);}
+  .stage-header .target-pill{font-family:var(--mono);font-size:12px;background:var(--panel-2);
+    border:1px solid var(--line);border-radius:20px;padding:6px 14px;color:var(--text);}
+
+  .rest-overlay{position:absolute;inset:0;background:rgba(10,12,9,.92);z-index:8;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;text-align:center;}
+  .rest-overlay .rlabel{font-family:var(--mono);font-size:12px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;}
+  .rest-overlay .rtime{font-family:var(--display);font-size:88px;color:var(--lime);line-height:1;}
+  .rest-overlay .rnext{font-size:14px;color:var(--text);max-width:280px;}
 
   .vf-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     flex-direction:column;gap:14px;background:rgba(10,12,9,.72);z-index:6;text-align:center;padding:20px;}
   .vf-overlay.hidden{display:none;}
   .vf-overlay p{color:var(--muted);font-size:13px;max-width:320px;margin:0;}
 
-  .status-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;
-    margin-top:10px;flex-wrap:wrap;}
+  .status-strip{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px;flex-wrap:wrap;}
   .status-left{display:flex;align-items:center;gap:14px;font-family:var(--mono);font-size:12px;color:var(--muted);}
   .pill{display:flex;align-items:center;gap:6px;}
   .led{width:8px;height:8px;border-radius:50%;background:#444;}
   .led.on{background:var(--lime);box-shadow:0 0 8px var(--lime);}
   .led.warn{background:var(--warn);box-shadow:0 0 8px var(--warn);}
-
   .status-right{display:flex;align-items:center;gap:8px;}
-
-  button.primary{font-family:var(--mono);font-size:12px;letter-spacing:1px;text-transform:uppercase;
-    background:var(--lime);color:#0A0C09;border:none;padding:11px 20px;border-radius:3px;
-    cursor:pointer;font-weight:700;transition:transform .1s ease;}
-  button.primary:hover{transform:translateY(-1px);}
-  button.primary:active{transform:translateY(0);}
-  button.primary.stop{background:var(--warn);}
-  button.ghost{font-family:var(--mono);font-size:11px;letter-spacing:1px;text-transform:uppercase;
-    background:transparent;color:var(--muted);border:1px solid var(--line);padding:8px 12px;
-    border-radius:3px;cursor:pointer;}
-  button.ghost:hover{color:var(--text);border-color:var(--lime-dim);}
-  button.icon-btn{font-family:var(--mono);font-size:14px;background:transparent;
-    border:1px solid var(--line);color:var(--muted);padding:8px 10px;border-radius:3px;cursor:pointer;}
+  button.icon-btn{font-family:var(--mono);font-size:14px;background:transparent;border:1px solid var(--line);
+    color:var(--muted);padding:8px 10px;border-radius:3px;cursor:pointer;}
   button.icon-btn.active{border-color:var(--lime-dim);color:var(--lime);}
 
   .sidebar{display:flex;flex-direction:column;gap:14px;}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px;}
-  .card h2{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;
-    color:var(--muted);margin:0 0 14px;}
+  .card h3{font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin:0 0 14px;}
 
-  /* rep dial - signature element */
   .dial-wrap{display:flex;align-items:center;justify-content:center;position:relative;}
-  .dial-wrap svg{width:100%;max-width:220px;}
+  .dial-wrap svg{width:100%;max-width:200px;}
   .dial-count{position:absolute;text-align:center;}
-  .dial-count .num{font-family:var(--display);font-size:56px;line-height:1;color:var(--text);}
-  .dial-count .lbl{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);
-    text-transform:uppercase;margin-top:2px;}
+  .dial-count .num{font-family:var(--display);font-size:50px;line-height:1;}
+  .dial-count .lbl{font-family:var(--mono);font-size:10px;letter-spacing:2px;color:var(--muted);text-transform:uppercase;margin-top:2px;}
 
-  .metric-row{display:flex;justify-content:space-between;align-items:center;
-    font-family:var(--mono);font-size:12px;color:var(--muted);padding:7px 0;
-    border-bottom:1px solid var(--line);}
-  .metric-row:last-child{border-bottom:none;}
-  .metric-row span.v{color:var(--text);font-weight:600;}
-
-  .feedback{font-size:14px;line-height:1.5;min-height:44px;display:flex;align-items:center;gap:10px;}
+  .feedback{font-size:14px;line-height:1.5;min-height:40px;display:flex;align-items:center;gap:10px;}
   .feedback .ic{width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:var(--lime);}
-  .feedback.warn .ic{background:var(--warn);}
-  .feedback.warn{color:#FFD9D2;}
+  .feedback.warn .ic{background:var(--warn);} .feedback.warn{color:#FFD9D2;}
 
-  .reset-row{display:flex;gap:8px;margin-top:12px;}
+  .set-controls{display:flex;gap:8px;margin-top:14px;}
+  .set-controls button{flex:1;}
+
+  .progress-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;}
+  .progress-list li{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;
+    padding:8px 10px;border-radius:4px;background:var(--panel-2);border:1px solid var(--line);}
+  .progress-list li.current{border-color:var(--lime);}
+  .progress-list li .pname{color:var(--text);}
+  .progress-list li .pcount{font-family:var(--mono);color:var(--muted);}
+  .progress-list li.complete .pname{color:var(--lime-dim);}
+
+  .next-up{font-size:13px;color:var(--text);line-height:1.5;}
+  .next-up .nx-ex{font-weight:600;} .next-up .nx-meta{color:var(--muted);font-family:var(--mono);font-size:11.5px;}
+
+  .summary-wrap{max-width:720px;margin:0 auto;}
+  .summary-wrap h2{font-family:var(--display);font-size:44px;margin:0 0 6px;}
+  .summary-wrap p.lede{color:var(--muted);margin:0 0 24px;}
+  table.summary-table{width:100%;border-collapse:collapse;margin-bottom:24px;}
+  table.summary-table th{font-family:var(--mono);font-size:10.5px;letter-spacing:1.5px;text-transform:uppercase;
+    color:var(--muted);text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);}
+  table.summary-table td{padding:10px 10px;border-bottom:1px solid var(--line);font-size:13px;}
+  table.summary-table td.best{font-family:var(--mono);color:var(--lime);}
+  .goal-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;
+    border-bottom:1px solid var(--line);font-size:13px;}
+  .goal-row:last-child{border-bottom:none;}
+  .goal-row .g-status{font-family:var(--mono);font-size:11px;padding:3px 10px;border-radius:12px;}
+  .goal-row .g-status.hit{background:rgba(201,255,62,.15);color:var(--lime);}
+  .goal-row .g-status.miss{background:rgba(255,255,255,.06);color:var(--muted);}
 
   footer{margin-top:26px;font-family:var(--mono);font-size:11px;color:var(--muted);
     display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;}
-  footer a{color:var(--muted);}
-
-  @media (prefers-reduced-motion: reduce){
-    button.primary, .tab{transition:none;}
-  }
 </style>
 </head>
 <body>
@@ -133,81 +146,117 @@
   <header>
     <div class="brand">
       <h1>SPOTTER<span class="dot">.</span></h1>
-      <small>vision-tracked rep coach</small>
+      <small>your calisthenics coach</small>
     </div>
-    <nav class="tabs" id="tabs">
-      <button class="tab active" data-ex="squat">Squat</button>
-      <button class="tab" data-ex="curl">Bicep Curl</button>
-      <button class="tab" data-ex="pushup">Push-Up</button>
-      <button class="tab" data-ex="jj">Jumping Jack</button>
-      <button class="tab" data-ex="freestyle">Freestyle — Any Move</button>
-    </nav>
+    <div class="status-right" id="headerVoiceRow">
+      <button class="icon-btn active" id="voiceBtn" title="Toggle voice coaching">🔊 Voice</button>
+    </div>
   </header>
 
-  <div class="grid">
-    <div>
-      <div class="viewfinder" id="viewfinder">
-        <video id="video" playsinline muted></video>
-        <canvas id="canvas"></canvas>
-        <div class="bracket tl"></div>
-        <div class="bracket tr"></div>
-        <div class="bracket bl"></div>
-        <div class="bracket br"></div>
-        <div class="vf-overlay" id="vfOverlay">
-          <p id="overlayText">Turn on your camera and step back so your whole body is in frame. SPOTTER tracks 17 body points to count reps, coach your form, and call your reps out loud.</p>
-          <button class="primary" id="startBtn">Start Camera</button>
-        </div>
-      </div>
-
-      <div class="status-strip">
-        <div class="status-left">
-          <div class="pill"><span class="led" id="camLed"></span> Camera</div>
-          <div class="pill"><span class="led" id="trackLed"></span> Tracking</div>
-          <div class="pill">Angle <span id="angleReadout" style="color:var(--text)">—</span></div>
-        </div>
-        <div class="status-right">
-          <button class="icon-btn active" id="voiceBtn" title="Toggle voice coaching">🔊 Voice</button>
-          <button class="ghost" id="toggleBtn">Stop</button>
-        </div>
-      </div>
+  <!-- SCREEN 1: pick a day -->
+  <section id="screenSelect">
+    <div class="day-grid" id="dayGrid"></div>
+    <div class="start-row">
+      <button class="primary" id="startWorkoutBtn" disabled>Select a day to begin</button>
     </div>
+  </section>
 
-    <div class="sidebar">
-      <div class="card">
-        <h2>Reps — <span id="exLabel">Squat</span></h2>
-        <div class="dial-wrap">
-          <svg viewBox="0 0 200 200">
-            <circle cx="100" cy="100" r="86" fill="none" stroke="var(--line)" stroke-width="10"/>
-            <circle cx="100" cy="100" r="86" fill="none" stroke="var(--lime)" stroke-width="10"
-              stroke-linecap="round" id="dialArc"
-              stroke-dasharray="540.35" stroke-dashoffset="540.35"
-              transform="rotate(-90 100 100)"/>
-          </svg>
-          <div class="dial-count">
-            <div class="num" id="repCount">0</div>
-            <div class="lbl">reps</div>
+  <!-- SCREEN 2: in-workout -->
+  <section id="screenWorkout" class="hidden">
+    <div class="grid">
+      <div>
+        <div class="stage-header">
+          <div>
+            <div class="section-eyebrow" id="sectionEyebrow">PUSH</div>
+            <h2 id="exerciseName">Pushups</h2>
+            <div class="set-label" id="setLabel">Set 1 of 3</div>
+          </div>
+          <div class="target-pill" id="targetPill">8–15 reps</div>
+        </div>
+
+        <div class="viewfinder" id="viewfinder">
+          <video id="video" playsinline muted></video>
+          <canvas id="canvas"></canvas>
+          <div class="bracket tl"></div><div class="bracket tr"></div>
+          <div class="bracket bl"></div><div class="bracket br"></div>
+          <div class="vf-overlay" id="vfOverlay">
+            <p id="overlayText">Loading camera and pose model…</p>
+          </div>
+          <div class="rest-overlay hidden" id="restOverlay">
+            <div class="rlabel">Rest</div>
+            <div class="rtime" id="restTime">45</div>
+            <div class="rnext" id="restNext">Up next: Pike Pushups</div>
+            <button class="ghost" id="skipRestBtn" style="margin-top:10px;">Skip Rest</button>
           </div>
         </div>
-        <div class="reset-row">
-          <button class="ghost" id="resetBtn" style="flex:1">Reset Count</button>
+
+        <div class="status-strip">
+          <div class="status-left">
+            <div class="pill"><span class="led" id="camLed"></span> Camera</div>
+            <div class="pill"><span class="led" id="trackLed"></span> Tracking</div>
+            <div class="pill">Angle <span id="angleReadout" style="color:var(--text)">—</span></div>
+          </div>
+          <button class="ghost" id="endWorkoutBtn">End Workout</button>
         </div>
       </div>
 
-      <div class="card">
-        <h2>Form Feedback</h2>
-        <div class="feedback" id="feedback"><span class="ic"></span><span id="feedbackText">Waiting for tracking to begin…</span></div>
-      </div>
+      <div class="sidebar">
+        <div class="card" id="currentSetCard">
+          <h3>Current Set</h3>
+          <div class="dial-wrap" id="dialWrapEl">
+            <svg viewBox="0 0 200 200">
+              <circle cx="100" cy="100" r="86" fill="none" stroke="var(--line)" stroke-width="10"/>
+              <circle cx="100" cy="100" r="86" fill="none" stroke="var(--lime)" stroke-width="10"
+                stroke-linecap="round" id="dialArc" stroke-dasharray="540.35" stroke-dashoffset="540.35"
+                transform="rotate(-90 100 100)"/>
+            </svg>
+            <div class="dial-count">
+              <div class="num" id="repCount">0</div>
+              <div class="lbl" id="dialUnitLabel">reps</div>
+            </div>
+          </div>
+          <button class="tap-btn hidden" id="manualTapBtn" style="margin-top:10px;">+1 Rep</button>
+          <div class="set-controls">
+            <button class="ghost" id="completeSetBtn">Complete Set →</button>
+          </div>
+        </div>
 
-      <div class="card">
-        <h2>Session</h2>
-        <div class="metric-row"><span>State</span><span class="v" id="stateVal">idle</span></div>
-        <div class="metric-row"><span>Detected movement</span><span class="v" id="detectedVal">—</span></div>
-        <div class="metric-row"><span>Best angle (min)</span><span class="v" id="minAngleVal">—</span></div>
-        <div class="metric-row"><span>Best angle (max)</span><span class="v" id="maxAngleVal">—</span></div>
-        <div class="metric-row"><span>Model</span><span class="v">MoveNet Lightning</span></div>
+        <div class="card">
+          <h3>Form Feedback</h3>
+          <div class="feedback" id="feedback"><span class="ic"></span><span id="feedbackText">Get set…</span></div>
+        </div>
+
+        <div class="card">
+          <h3>Up Next</h3>
+          <div class="next-up" id="nextUp">—</div>
+        </div>
+
+        <div class="card">
+          <h3 id="progressTitle">Today's Progress</h3>
+          <ul class="progress-list" id="progressList"></ul>
+        </div>
       </div>
     </div>
-  </div>
+  </section>
+
+  <!-- SCREEN 3: summary -->
+  <section id="screenSummary" class="hidden">
+    <div class="summary-wrap">
+      <h2>Session Complete</h2>
+      <p class="lede" id="summaryLede">Nice work. Here's how today went.</p>
+      <table class="summary-table">
+        <thead><tr><th>Exercise</th><th>Sets</th><th>Best Set</th></tr></thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+      <h3 style="font-family:var(--mono);font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);">
+        Main Goals Before Moving Up
+      </h3>
+      <div id="goalsList"></div>
+      <div class="start-row">
+        <button class="primary" id="restartBtn">Back to Day Select</button>
+      </div>
+    </div>
+  </section>
 
   <footer>
     <span>All pose tracking runs locally in your browser — no video leaves your device.</span>
@@ -217,35 +266,116 @@
 
 <script>
 (function(){
-  const video = document.getElementById('video');
-  const canvas = document.getElementById('canvas');
-  const ctx = canvas.getContext('2d');
-  const startBtn = document.getElementById('startBtn');
-  const toggleBtn = document.getElementById('toggleBtn');
-  const resetBtn = document.getElementById('resetBtn');
-  const voiceBtn = document.getElementById('voiceBtn');
-  const vfOverlay = document.getElementById('vfOverlay');
-  const overlayText = document.getElementById('overlayText');
-  const camLed = document.getElementById('camLed');
-  const trackLed = document.getElementById('trackLed');
-  const angleReadout = document.getElementById('angleReadout');
-  const repCountEl = document.getElementById('repCount');
-  const dialArc = document.getElementById('dialArc');
-  const feedbackBox = document.getElementById('feedback');
-  const feedbackText = document.getElementById('feedbackText');
-  const stateVal = document.getElementById('stateVal');
-  const detectedVal = document.getElementById('detectedVal');
-  const minAngleVal = document.getElementById('minAngleVal');
-  const maxAngleVal = document.getElementById('maxAngleVal');
-  const exLabel = document.getElementById('exLabel');
-  const tabs = document.querySelectorAll('.tab');
 
-  const DIAL_CIRC = 540.35;
+  // ---------------- Program data ----------------
+  const PROGRAM = {
+    day1: {
+      title:'Day 1 — Strength Focus',
+      sections:[
+        {name:'Push', exercises:[
+          {name:'Pushups', sets:3, target:{type:'reps',min:8,max:15}, tracker:'pushup'},
+          {name:'Pike Pushups', sets:3, target:{type:'reps',min:5,max:10}, tracker:'pushup'}
+        ]},
+        {name:'Pull', exercises:[
+          {name:'Australian Rows', sets:3, target:{type:'reps',min:8,max:15}, tracker:'row'},
+          {name:'Assisted/Negative Pullups', sets:3, target:{type:'reps',min:5,max:8}, tracker:'pullup'}
+        ]},
+        {name:'Legs', exercises:[
+          {name:'Air Squats', sets:3, target:{type:'reps',min:15,max:25}, tracker:'squat'},
+          {name:'Bulgarian Split Squats', sets:3, target:{type:'reps',min:8,max:12}, eachLeg:true, tracker:'squat'}
+        ]},
+        {name:'Core', exercises:[
+          {name:'Hollow Body Hold', sets:3, target:{type:'duration',min:20,max:40}, tracker:'hold'}
+        ]}
+      ]
+    },
+    day2: {
+      title:'Day 2 — Skill + Control Focus',
+      sections:[
+        {name:'Push', exercises:[
+          {name:'Pushup Progression', sets:3, target:{type:'open'}, tracker:'manual'},
+          {name:'Dips', sets:3, target:{type:'reps',min:6,max:12}, tracker:'dip'}
+        ]},
+        {name:'Pull', exercises:[
+          {name:'Rows', sets:3, target:{type:'reps',min:10,max:15}, tracker:'row'},
+          {name:'Scapular Pulls', sets:3, target:{type:'reps',min:10,max:15}, tracker:'manual'}
+        ]},
+        {name:'Legs', exercises:[
+          {name:'Split Squats', sets:3, target:{type:'reps',min:10,max:10}, eachLeg:true, tracker:'squat'},
+          {name:'Calf Raises', sets:3, target:{type:'reps',min:20,max:20}, tracker:'manual'}
+        ]},
+        {name:'Skills', exercises:[
+          {name:'L-Sit Practice', sets:1, target:{type:'duration',min:300,max:300}, tracker:'hold'},
+          {name:'Handstand Practice', sets:1, target:{type:'duration',min:300,max:300}, tracker:'hold'}
+        ]}
+      ]
+    },
+    day3: {
+      title:'Day 3 — Strength + Progression Focus',
+      sections:[
+        {name:'Push', exercises:[
+          {name:'Pushups', sets:4, target:{type:'reps',min:10,max:20}, tracker:'pushup'},
+          {name:'Pike Pushups', sets:3, target:{type:'reps',min:8,max:12}, tracker:'pushup'}
+        ]},
+        {name:'Pull', exercises:[
+          {name:'Pullup Progression', sets:4, target:{type:'open'}, tracker:'manual'},
+          {name:'Australian Rows', sets:3, target:{type:'reps',min:12,max:15}, tracker:'row'}
+        ]},
+        {name:'Legs', exercises:[
+          {name:'Squats', sets:4, target:{type:'reps',min:20,max:20}, tracker:'squat'},
+          {name:'Assisted Pistol Squats', sets:3, target:{type:'reps',min:5,max:5}, eachLeg:true, tracker:'squat'}
+        ]},
+        {name:'Core', exercises:[
+          {name:'Knee Raises', sets:3, target:{type:'reps',min:10,max:15}, tracker:'situp'},
+          {name:'Superman Hold', sets:3, target:{type:'duration',min:30,max:30}, tracker:'hold'}
+        ]}
+      ]
+    }
+  };
 
+  const GOALS = [
+    {label:'30 pushups', exercise:'Pushups', type:'reps', value:30},
+    {label:'10 pullups', exercise:'Assisted/Negative Pullups', type:'reps', value:10},
+    {label:'15 dips', exercise:'Dips', type:'reps', value:15},
+    {label:'60 sec hollow hold', exercise:'Hollow Body Hold', type:'duration', value:60},
+    {label:'20 Bulgarian split squats each leg', exercise:'Bulgarian Split Squats', type:'reps', value:20},
+    {label:'30 sec L-sit progression', exercise:'L-Sit Practice', type:'duration', value:30}
+  ];
+
+  // ---------------- Tracker configs (pose-based) ----------------
+  const TRACKERS = {
+    pushup: {type:'pose-rep', jointSet:['shoulder','elbow','wrist'], downT:95, upT:155, minSane:45, smooth:0.28,
+      downMsg:'Chest low — press back up.', upMsg:'Arms extended. Nice rep.',
+      formCheck(a,kpMap){
+        if(a<45) return {warn:true,msg:'Careful — very deep on the elbow.'};
+        const S=avgPt2(kpMap,'left_shoulder','right_shoulder'), H=avgPt2(kpMap,'left_hip','right_hip'), An=avgPt2(kpMap,'left_ankle','right_ankle');
+        if(S&&H&&An){ const dev=hipLineDeviation(S,H,An);
+          if(dev>0.12) return {warn:true,msg:'Hips are sagging — brace your core.'};
+          if(dev<-0.12) return {warn:true,msg:'Hips piked too high — flatten your line.'};
+        } return null;
+      }},
+    squat: {type:'pose-rep', jointSet:['hip','knee','ankle'], downT:100, upT:160, minSane:55, smooth:0.28,
+      downMsg:'Good depth — drive up.', upMsg:'Standing tall. Nice rep.',
+      formCheck(a){ if(a<55) return {warn:true,msg:'Very deep — control it, don\'t bounce.'}; return null; }},
+    pullup: {type:'pose-rep', jointSet:['shoulder','elbow','wrist'], downT:70, upT:160, invert:true, minSane:25, smooth:0.3,
+      downMsg:'Good pull — chin up.', upMsg:'Full extension. Nice rep.', formCheck(){return null;}},
+    row: {type:'pose-rep', jointSet:['shoulder','elbow','wrist'], downT:70, upT:160, invert:true, minSane:25, smooth:0.3,
+      downMsg:'Squeeze at the top of the pull.', upMsg:'Arms extended. Nice rep.', formCheck(){return null;}},
+    dip: {type:'pose-rep', jointSet:['shoulder','elbow','wrist'], downT:90, upT:160, minSane:40, smooth:0.3,
+      downMsg:'Good depth — press to lockout.', upMsg:'Locked out. Nice rep.',
+      formCheck(a){ if(a<40) return {warn:true,msg:'That\'s deep on the shoulders — ease up if needed.'}; return null; }},
+    situp: {type:'pose-rep', jointSet:['shoulder','hip','knee'], downT:100, upT:150, minSane:55, smooth:0.32,
+      downMsg:'Nice crunch.', upMsg:'Back down. Nice rep.', formCheck(){return null;}},
+    hold: {type:'hold'},
+    manual: {type:'manual'}
+  };
+
+  function avgPt2(kpMap,a,b){ if(!kpMap[a]||!kpMap[b]) return null; return {x:(kpMap[a].x+kpMap[b].x)/2, y:(kpMap[a].y+kpMap[b].y)/2}; }
+
+  // ---------------- Pose engine primitives ----------------
   const KP = ['nose','left_eye','right_eye','left_ear','right_ear','left_shoulder','right_shoulder',
     'left_elbow','right_elbow','left_wrist','right_wrist','left_hip','right_hip',
     'left_knee','right_knee','left_ankle','right_ankle'];
-
   const CONNECTIONS = [
     ['left_shoulder','right_shoulder'],['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
     ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
@@ -253,479 +383,411 @@
     ['left_hip','left_knee'],['left_knee','left_ankle'],['right_hip','right_knee'],['right_knee','right_ankle']
   ];
 
-  const EXERCISES = {
-    squat: {
-      label:'Squat', jointSet:['hip','knee','ankle'],
-      downT:100, upT:160, minSane:55,
-      downMsg:'Nice depth — drive back up through your heels.',
-      upMsg:'Good rep. Reset your stance and go again.',
-      formCheck(a){
-        if(a < 55) return {warn:true, msg:'That\'s very deep — control the descent, don\'t bounce.'};
-        return null;
-      }
-    },
-    curl: {
-      label:'Bicep Curl', jointSet:['shoulder','elbow','wrist'],
-      downT:60, upT:150, minSane:25, invert:true,
-      downMsg:'Full contraction — squeeze at the top.',
-      upMsg:'Arm extended. Keep your elbow pinned to your side.',
-      formCheck(a){ return null; }
-    },
-    pushup: {
-      label:'Push-Up', jointSet:['shoulder','elbow','wrist'],
-      downT:95, upT:155, minSane:45,
-      downMsg:'Chest low — now press away from the floor.',
-      upMsg:'Arms locked out. Keep your core tight on the way down.',
-      formCheck(a){
-        if(a < 45) return {warn:true, msg:'Careful — that\'s a very deep bend on the elbow.'};
-        return null;
-      }
-    },
-    jj: {
-      label:'Jumping Jack', jointSet:['hip','shoulder','wrist'],
-      downT:40, upT:100, minSane:10, invert:true,
-      downMsg:'Arms down — feet together.',
-      upMsg:'Arms overhead — nice and wide.',
-      formCheck(a){ return null; }
-    }
-  };
-
-  // Candidate joint triplets used by Freestyle mode to auto-detect whatever movement is happening.
-  const FREESTYLE_CANDIDATES = [
-    {name:'left_elbow', points:['left_shoulder','left_elbow','left_wrist'], label:'Elbow (L)'},
-    {name:'right_elbow', points:['right_shoulder','right_elbow','right_wrist'], label:'Elbow (R)'},
-    {name:'left_knee', points:['left_hip','left_knee','left_ankle'], label:'Knee (L)'},
-    {name:'right_knee', points:['right_hip','right_knee','right_ankle'], label:'Knee (R)'},
-    {name:'left_hip', points:['left_shoulder','left_hip','left_knee'], label:'Hip / Torso (L)'},
-    {name:'right_hip', points:['right_shoulder','right_hip','right_knee'], label:'Hip / Torso (R)'},
-    {name:'left_shoulder_raise', points:['left_hip','left_shoulder','left_elbow'], label:'Shoulder (L)'},
-    {name:'right_shoulder_raise', points:['right_hip','right_shoulder','right_elbow'], label:'Shoulder (R)'}
-  ];
-  const FREESTYLE_WINDOW_MS = 4000;
-  const FREESTYLE_MIN_RANGE = 28; // degrees of motion required before we call something "an exercise"
-  let freestyleBuffers = {};
-  FREESTYLE_CANDIDATES.forEach(c=>{ freestyleBuffers[c.name] = []; });
-  let freestyleLock = null; // the candidate currently being used for rep counting
-  let lastFreestyleEval = 0;
-
-  let currentExKey = 'squat';
-  let model = null;
-  let running = false;
-  let rafId = null;
-  let repCount = 0;
-  let repState = 'up';
-  let smoothedAngle = null;
-  let minSeen = Infinity, maxSeen = -Infinity;
-
-  // ---------- Voice coaching ----------
-  let voiceEnabled = true;
-  let pendingSpeech = 0;
-  let lastFillerAt = 0;
-  let sessionStartAnnounced = false;
-
-  const FILLER_LINES = [
-    "Nice control.", "Keep that core tight.", "Good tempo.", "Stay smooth.",
-    "Breathe — don't hold it.", "That's it, keep going.", "Looking solid.", "Stay locked in."
-  ];
-  const MILESTONE_LINES = {
-    1: "First rep — let's build on that.",
-    5: "Five reps. Nice rhythm.",
-    10: "Ten reps! Great work.",
-    15: "Fifteen — you're grinding now.",
-    20: "Twenty reps. Strong session.",
-    25: "Twenty five! That's serious work.",
-    30: "Thirty reps. Impressive."
-  };
-  const START_LINES = ["Alright, let's get after it.", "Showtime — I'm watching your form.", "Locked in. Let's move."];
-
-  function speak(text, {priority=false}={}){
-    if(!voiceEnabled || !('speechSynthesis' in window)) return;
-    if(!priority && pendingSpeech >= 2) return;
-    try{
-      const u = new SpeechSynthesisUtterance(text);
-      u.rate = 1.05;
-      u.pitch = 1.0;
-      u.volume = 1;
-      pendingSpeech++;
-      u.onend = ()=>{ pendingSpeech = Math.max(0, pendingSpeech-1); };
-      u.onerror = ()=>{ pendingSpeech = Math.max(0, pendingSpeech-1); };
-      speechSynthesis.speak(u);
-    }catch(e){ /* speech not available, ignore */ }
-  }
-
-  function announceRep(n){
-    speak(String(n), {priority:true});
-    if(MILESTONE_LINES[n]){
-      speak(MILESTONE_LINES[n], {priority:true});
-    }else{
-      const now = performance.now();
-      if(now - lastFillerAt > 9000 && Math.random() < 0.35){
-        lastFillerAt = now;
-        speak(FILLER_LINES[Math.floor(Math.random()*FILLER_LINES.length)]);
-      }
-    }
-  }
-
-  function setLed(el, on, warnMode){
-    el.classList.toggle('on', !!on && !warnMode);
-    el.classList.toggle('warn', !!warnMode);
-  }
-
   function angleOf(a,b,c){
-    const ab = {x:a.x-b.x, y:a.y-b.y};
-    const cb = {x:c.x-b.x, y:c.y-b.y};
-    const dot = ab.x*cb.x + ab.y*cb.y;
-    const magAB = Math.hypot(ab.x,ab.y);
-    const magCB = Math.hypot(cb.x,cb.y);
-    if(magAB < 1e-6 || magCB < 1e-6) return null;
-    let cos = dot/(magAB*magCB);
-    cos = Math.min(1, Math.max(-1, cos));
-    return Math.acos(cos) * 180 / Math.PI;
+    const ab={x:a.x-b.x,y:a.y-b.y}, cb={x:c.x-b.x,y:c.y-b.y};
+    const dot=ab.x*cb.x+ab.y*cb.y, magAB=Math.hypot(ab.x,ab.y), magCB=Math.hypot(cb.x,cb.y);
+    if(magAB<1e-6||magCB<1e-6) return null;
+    let cos=dot/(magAB*magCB); cos=Math.min(1,Math.max(-1,cos));
+    return Math.acos(cos)*180/Math.PI;
   }
-
+  function hipLineDeviation(shoulder,hip,ankle){
+    const span=ankle.x-shoulder.x; if(Math.abs(span)<1e-3) return 0;
+    const t=(hip.x-shoulder.x)/span; const expectedY=shoulder.y+t*(ankle.y-shoulder.y);
+    const bodyLen=Math.hypot(ankle.x-shoulder.x,ankle.y-shoulder.y)||1;
+    return (hip.y-expectedY)/bodyLen;
+  }
   function pickSide(kpMap, base){
-    const left = ['left_'+base[0], 'left_'+base[1], 'left_'+base[2]];
-    const right = ['right_'+base[0], 'right_'+base[1], 'right_'+base[2]];
-    const lScore = left.reduce((s,k)=> s + (kpMap[k]?kpMap[k].score:0), 0);
-    const rScore = right.reduce((s,k)=> s + (kpMap[k]?kpMap[k].score:0), 0);
-    return rScore >= lScore ? right : left;
+    const left=['left_'+base[0],'left_'+base[1],'left_'+base[2]], right=['right_'+base[0],'right_'+base[1],'right_'+base[2]];
+    const lScore=left.reduce((s,k)=>s+(kpMap[k]?kpMap[k].score:0),0), rScore=right.reduce((s,k)=>s+(kpMap[k]?kpMap[k].score:0),0);
+    return rScore>=lScore?right:left;
   }
+  function avgScore(kpMap,names){ return names.reduce((s,n)=>s+(kpMap[n]?kpMap[n].score:0),0)/names.length; }
+
+  // ---------------- DOM refs ----------------
+  const video=document.getElementById('video'), canvas=document.getElementById('canvas'), ctx=canvas.getContext('2d');
+  const screenSelect=document.getElementById('screenSelect'), screenWorkout=document.getElementById('screenWorkout'), screenSummary=document.getElementById('screenSummary');
+  const dayGrid=document.getElementById('dayGrid'), startWorkoutBtn=document.getElementById('startWorkoutBtn');
+  const vfOverlay=document.getElementById('vfOverlay'), overlayText=document.getElementById('overlayText');
+  const restOverlay=document.getElementById('restOverlay'), restTime=document.getElementById('restTime'), restNext=document.getElementById('restNext'), skipRestBtn=document.getElementById('skipRestBtn');
+  const camLed=document.getElementById('camLed'), trackLed=document.getElementById('trackLed'), angleReadout=document.getElementById('angleReadout');
+  const sectionEyebrow=document.getElementById('sectionEyebrow'), exerciseNameEl=document.getElementById('exerciseName'), setLabelEl=document.getElementById('setLabel'), targetPill=document.getElementById('targetPill');
+  const dialArc=document.getElementById('dialArc'), repCountEl=document.getElementById('repCount'), dialUnitLabel=document.getElementById('dialUnitLabel');
+  const manualTapBtn=document.getElementById('manualTapBtn'), completeSetBtn=document.getElementById('completeSetBtn'), endWorkoutBtn=document.getElementById('endWorkoutBtn');
+  const feedbackBox=document.getElementById('feedback'), feedbackText=document.getElementById('feedbackText');
+  const nextUp=document.getElementById('nextUp'), progressList=document.getElementById('progressList');
+  const summaryBody=document.getElementById('summaryBody'), goalsList=document.getElementById('goalsList'), restartBtn=document.getElementById('restartBtn'), summaryLede=document.getElementById('summaryLede');
+  const voiceBtn=document.getElementById('voiceBtn');
+  const DIAL_CIRC=540.35;
+
+  // ---------------- Voice ----------------
+  let voiceEnabled=true, pendingSpeech=0, lastFillerAt=0;
+  const FILLER_LINES=["Nice control.","Keep that core tight.","Good tempo.","Stay smooth.","Breathe — don't hold it.","That's it, keep going.","Looking solid.","Stay locked in."];
+  const MILESTONE_LINES={5:"Five. Nice rhythm.",10:"Ten! Great work.",15:"Fifteen — grinding now.",20:"Twenty! Strong set."};
+  function speak(text,{priority=false}={}){
+    if(!voiceEnabled||!('speechSynthesis' in window)) return;
+    if(!priority && pendingSpeech>=2) return;
+    try{
+      const u=new SpeechSynthesisUtterance(text); u.rate=1.05; u.pitch=1; u.volume=1;
+      pendingSpeech++; u.onend=()=>{pendingSpeech=Math.max(0,pendingSpeech-1);}; u.onerror=u.onend;
+      speechSynthesis.speak(u);
+    }catch(e){}
+  }
+  function announceRep(n){
+    speak(String(n),{priority:true});
+    if(MILESTONE_LINES[n]) speak(MILESTONE_LINES[n],{priority:true});
+    else{
+      const now=performance.now();
+      if(now-lastFillerAt>9000 && Math.random()<0.3){ lastFillerAt=now; speak(FILLER_LINES[Math.floor(Math.random()*FILLER_LINES.length)]); }
+    }
+  }
+  voiceBtn.addEventListener('click',()=>{
+    voiceEnabled=!voiceEnabled;
+    voiceBtn.classList.toggle('active',voiceEnabled);
+    voiceBtn.textContent=voiceEnabled?'🔊 Voice':'🔇 Voice';
+    if(!voiceEnabled && 'speechSynthesis' in window) speechSynthesis.cancel();
+  });
+
+  // ---------------- Model / camera ----------------
+  let model=null, running=false, rafId=null;
+  function setLed(el,on,warnMode){ el.classList.toggle('on',!!on&&!warnMode); el.classList.toggle('warn',!!warnMode); }
 
   async function initModel(){
     await tf.ready();
     try{ await tf.setBackend('webgl'); }catch(e){ await tf.setBackend('cpu'); }
-    model = await tf.loadGraphModel(
-      'https://tfhub.dev/google/tfjs-model/movenet/singlepose/lightning/4',
-      {fromTFHub:true}
-    );
+    model=await tf.loadGraphModel('https://tfhub.dev/google/tfjs-model/movenet/singlepose/lightning/4',{fromTFHub:true});
   }
-
-  async function startCamera(){
-    overlayText.textContent = 'Requesting camera access…';
-    try{
-      const stream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'}, audio:false});
-      video.srcObject = stream;
-      await video.play();
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      setLed(camLed, true);
-      if(!model){
-        overlayText.textContent = 'Loading pose model…';
-        await initModel();
-      }
-      vfOverlay.classList.add('hidden');
-      running = true;
-      toggleBtn.textContent = 'Stop';
-      toggleBtn.classList.remove('stop');
-      loop();
-    }catch(err){
-      overlayText.textContent = 'Could not access camera: ' + err.message + '. Check your browser permissions and try again.';
-      setLed(camLed, false, true);
-    }
-  }
-
-  function stopCamera(){
-    running = false;
-    if(rafId) cancelAnimationFrame(rafId);
-    const stream = video.srcObject;
-    if(stream){ stream.getTracks().forEach(t=>t.stop()); }
-    video.srcObject = null;
-    setLed(camLed, false);
-    setLed(trackLed, false);
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-    vfOverlay.classList.remove('hidden');
-    overlayText.textContent = 'Camera stopped. Start again when you\'re ready.';
-    toggleBtn.textContent = 'Start';
-  }
-
   async function estimatePose(){
-    const input = tf.tidy(()=>{
-      let img = tf.browser.fromPixels(video);
-      img = tf.image.resizeBilinear(img, [192,192]);
-      img = img.expandDims(0);
-      return tf.cast(img, 'int32');
-    });
-    const output = model.execute(input);
-    const arr = await output.array();
-    input.dispose();
-    output.dispose();
-
-    const raw = arr[0][0];
-    const kpMap = {};
-    for(let i=0;i<17;i++){
-      const [y,x,score] = raw[i];
-      kpMap[KP[i]] = {x: x*video.videoWidth, y: y*video.videoHeight, score};
-    }
+    const input=tf.tidy(()=>{ let img=tf.browser.fromPixels(video); img=tf.image.resizeBilinear(img,[192,192]); img=img.expandDims(0); return tf.cast(img,'int32'); });
+    const output=model.execute(input); const arr=await output.array(); input.dispose(); output.dispose();
+    const raw=arr[0][0]; const kpMap={};
+    for(let i=0;i<17;i++){ const [y,x,score]=raw[i]; kpMap[KP[i]]={x:x*video.videoWidth,y:y*video.videoHeight,score}; }
     return kpMap;
   }
-
   function drawSkeleton(kpMap){
+    ctx.clearRect(0,0,canvas.width,canvas.height); ctx.lineWidth=3;
+    CONNECTIONS.forEach(([a,b])=>{ const pa=kpMap[a],pb=kpMap[b];
+      if(pa&&pb&&pa.score>0.35&&pb.score>0.35){ ctx.strokeStyle='rgba(201,255,62,0.75)'; ctx.beginPath(); ctx.moveTo(pa.x,pa.y); ctx.lineTo(pb.x,pb.y); ctx.stroke(); } });
+    KP.forEach(k=>{ const p=kpMap[k]; if(p&&p.score>0.35){ ctx.beginPath(); ctx.arc(p.x,p.y,4,0,Math.PI*2); ctx.fillStyle='#EDEFE6'; ctx.fill(); } });
+  }
+  async function startCamera(){
+    overlayText.textContent='Requesting camera access…';
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user'},audio:false});
+      video.srcObject=stream; await video.play();
+      canvas.width=video.videoWidth; canvas.height=video.videoHeight;
+      setLed(camLed,true);
+      if(!model){ overlayText.textContent='Loading pose model…'; await initModel(); }
+      vfOverlay.classList.add('hidden');
+      running=true; loop();
+      return true;
+    }catch(err){
+      overlayText.textContent='Could not access camera: '+err.message+'. Check permissions and try again.';
+      setLed(camLed,false,true);
+      return false;
+    }
+  }
+  function stopCamera(){
+    running=false; if(rafId) cancelAnimationFrame(rafId);
+    const stream=video.srcObject; if(stream) stream.getTracks().forEach(t=>t.stop());
+    video.srcObject=null; setLed(camLed,false); setLed(trackLed,false);
     ctx.clearRect(0,0,canvas.width,canvas.height);
-    ctx.lineWidth = 3;
-    CONNECTIONS.forEach(([a,b])=>{
-      const pa = kpMap[a], pb = kpMap[b];
-      if(pa && pb && pa.score>0.35 && pb.score>0.35){
-        ctx.strokeStyle = 'rgba(201,255,62,0.75)';
-        ctx.beginPath();
-        ctx.moveTo(pa.x, pa.y);
-        ctx.lineTo(pb.x, pb.y);
-        ctx.stroke();
-      }
-    });
-    KP.forEach(k=>{
-      const p = kpMap[k];
-      if(p && p.score>0.35){
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 4, 0, Math.PI*2);
-        ctx.fillStyle = '#EDEFE6';
-        ctx.fill();
-      }
-    });
   }
-
-  function avgScore(kpMap, names){
-    return names.reduce((s,n)=> s + (kpMap[n]?kpMap[n].score:0), 0) / names.length;
-  }
-
-  function setFeedback(msg, warn){
-    feedbackText.textContent = msg;
-    feedbackBox.classList.toggle('warn', !!warn);
-  }
-
-  function updateDial(angle, downT, upT, invert){
-    let t;
-    if(invert){
-      t = (angle - downT) / (upT - downT);
-    }else{
-      t = (upT - angle) / (upT - downT);
-    }
-    t = Math.min(1, Math.max(0, t));
-    dialArc.setAttribute('stroke-dashoffset', String(DIAL_CIRC * (1 - t)));
-  }
-
-  function pulseDial(){
-    dialArc.style.filter = 'drop-shadow(0 0 6px rgba(201,255,62,0.9))';
-    setTimeout(()=>{ dialArc.style.filter = ''; }, 220);
-  }
-
-  function processExercise(kpMap){
-    if(currentExKey === 'freestyle'){
-      processFreestyle(kpMap);
-      return;
-    }
-    const ex = EXERCISES[currentExKey];
-    const [pA, pB, pC] = pickSide(kpMap, ex.jointSet);
-    const a = kpMap[pA], b = kpMap[pB], c = kpMap[pC];
-    const coreScore = avgScore(kpMap, [pA,pB,pC]);
-
-    if(coreScore < 0.35){
-      setLed(trackLed, false);
-      angleReadout.textContent = '—';
-      setFeedback('Step back so your full body is visible to the camera.', false);
-      return;
-    }
-    setLed(trackLed, true);
-
-    const raw = angleOf(a,b,c);
-    if(raw === null) return;
-    smoothedAngle = smoothedAngle === null ? raw : (smoothedAngle*0.72 + raw*0.28);
-    const angle = smoothedAngle;
-
-    angleReadout.textContent = Math.round(angle) + '°';
-    minSeen = Math.min(minSeen, angle);
-    maxSeen = Math.max(maxSeen, angle);
-    minAngleVal.textContent = isFinite(minSeen) ? Math.round(minSeen)+'°' : '—';
-    maxAngleVal.textContent = isFinite(maxSeen) ? Math.round(maxSeen)+'°' : '—';
-
-    updateDial(angle, ex.downT, ex.upT, ex.invert);
-
-    const isDownState = angle <= ex.downT;
-    const isUpState = angle >= ex.upT;
-
-    if(repState === 'up' && isDownState){
-      repState = 'down';
-      stateVal.textContent = 'down';
-      setFeedback(ex.downMsg, false);
-      const fc = ex.formCheck(angle);
-      if(fc && fc.warn){
-        setFeedback(fc.msg, true);
-        speak(fc.msg, {priority:true});
-      }
-    }else if(repState === 'down' && isUpState){
-      repState = 'up';
-      stateVal.textContent = 'up';
-      repCount += 1;
-      repCountEl.textContent = repCount;
-      setFeedback(ex.upMsg, false);
-      pulseDial();
-      announceRep(repCount);
-    }
-  }
-
-  // Freestyle: continuously score several joint-angle candidates and lock onto
-  // whichever one is currently oscillating the most — that's the exercise being done.
-  function processFreestyle(kpMap){
-    const now = performance.now();
-    let anyTracked = false;
-
-    FREESTYLE_CANDIDATES.forEach(c=>{
-      const [pa, pb, pc] = c.points;
-      const A = kpMap[pa], B = kpMap[pb], C = kpMap[pc];
-      const score = (A && B && C) ? (A.score+B.score+C.score)/3 : 0;
-      if(score < 0.35) return;
-      const ang = angleOf(A,B,C);
-      if(ang === null) return;
-      anyTracked = true;
-      const buf = freestyleBuffers[c.name];
-      buf.push({t:now, angle:ang});
-      while(buf.length && now - buf[0].t > FREESTYLE_WINDOW_MS) buf.shift();
-    });
-
-    if(!anyTracked){
-      setLed(trackLed, false);
-      angleReadout.textContent = '—';
-      setFeedback('Step into frame so I can see your whole body.', false);
-      return;
-    }
-    setLed(trackLed, true);
-
-    // Re-evaluate which movement is active, but only while "neutral" (up state)
-    // so we don't yank the lock away mid-rep.
-    if(repState === 'up' && now - lastFreestyleEval > 700){
-      lastFreestyleEval = now;
-      let best = null, bestRange = 0;
-      FREESTYLE_CANDIDATES.forEach(c=>{
-        const buf = freestyleBuffers[c.name];
-        if(buf.length < 6) return;
-        const angles = buf.map(p=>p.angle);
-        const range = Math.max(...angles) - Math.min(...angles);
-        if(range > bestRange){ bestRange = range; best = c; }
-      });
-      if(best && bestRange >= FREESTYLE_MIN_RANGE){
-        if(!freestyleLock || freestyleLock.name !== best.name){
-          freestyleLock = best;
-          detectedVal.textContent = best.label;
-          exLabel.textContent = 'Freestyle · ' + best.label;
-        }
-      }else if(!freestyleLock){
-        setFeedback('Move through a full rep — I\'m watching for your exercise.', false);
-      }
-    }
-
-    if(!freestyleLock) return;
-
-    const buf = freestyleBuffers[freestyleLock.name];
-    if(buf.length < 6) return;
-    const angles = buf.map(p=>p.angle);
-    const lo = Math.min(...angles), hi = Math.max(...angles);
-    const range = hi - lo;
-    if(range < FREESTYLE_MIN_RANGE - 8){
-      // Motion faded out — release the lock so we can pick up a new exercise.
-      freestyleLock = null;
-      detectedVal.textContent = '—';
-      exLabel.textContent = 'Freestyle';
-      return;
-    }
-    const margin = range * 0.22;
-    const downT = lo + margin;
-    const upT = hi - margin;
-
-    const raw = angles[angles.length-1];
-    smoothedAngle = smoothedAngle === null ? raw : (smoothedAngle*0.7 + raw*0.3);
-    const angle = smoothedAngle;
-    angleReadout.textContent = Math.round(angle) + '°';
-    minSeen = Math.min(minSeen, angle);
-    maxSeen = Math.max(maxSeen, angle);
-    minAngleVal.textContent = isFinite(minSeen) ? Math.round(minSeen)+'°' : '—';
-    maxAngleVal.textContent = isFinite(maxSeen) ? Math.round(maxSeen)+'°' : '—';
-
-    updateDial(angle, downT, upT, false);
-
-    const isDownState = angle <= downT;
-    const isUpState = angle >= upT;
-
-    if(repState === 'up' && isDownState){
-      repState = 'down';
-      stateVal.textContent = 'down';
-      setFeedback('Tracking your ' + freestyleLock.label.toLowerCase() + ' movement.', false);
-    }else if(repState === 'down' && isUpState){
-      repState = 'up';
-      stateVal.textContent = 'up';
-      repCount += 1;
-      repCountEl.textContent = repCount;
-      setFeedback('Rep counted — keep the same range of motion.', false);
-      pulseDial();
-      announceRep(repCount);
-    }
-  }
-
   async function loop(){
     if(!running) return;
-    if(video.readyState >= 2){
-      const kpMap = await estimatePose();
+    if(video.readyState>=2 && WF.phase==='active'){
+      const kpMap=await estimatePose();
       drawSkeleton(kpMap);
-      processExercise(kpMap);
+      processActiveBlock(kpMap);
     }
-    rafId = requestAnimationFrame(loop);
+    rafId=requestAnimationFrame(loop);
   }
 
-  function resetSession(){
-    repCount = 0;
-    repState = 'up';
-    minSeen = Infinity; maxSeen = -Infinity;
-    smoothedAngle = null;
-    repCountEl.textContent = '0';
-    minAngleVal.textContent = '—';
-    maxAngleVal.textContent = '—';
-    dialArc.setAttribute('stroke-dashoffset', String(DIAL_CIRC));
-    stateVal.textContent = 'idle';
-    setFeedback('Waiting for tracking to begin…', false);
-    freestyleLock = null;
-    detectedVal.textContent = '—';
-    FREESTYLE_CANDIDATES.forEach(c=>{ freestyleBuffers[c.name] = []; });
+  // ---------------- Workout flow state ----------------
+  const WF = { day:null, blocks:[], idx:0, phase:'idle', log:[], smoothedAngle:null, repState:'up', repCount:0, holdMs:0, holdLastTick:null, restRemaining:0, restTimerId:null };
+
+  function buildBlocks(dayKey){
+    const day=PROGRAM[dayKey]; const blocks=[];
+    day.sections.forEach(section=>{
+      section.exercises.forEach(ex=>{
+        for(let s=1;s<=ex.sets;s++){
+          if(ex.eachLeg){
+            ['Left','Right'].forEach(leg=>{
+              blocks.push({section:section.name, exerciseName:ex.name, tracker:ex.tracker, target:ex.target, setIndex:s, totalSets:ex.sets, leg});
+            });
+          }else{
+            blocks.push({section:section.name, exerciseName:ex.name, tracker:ex.tracker, target:ex.target, setIndex:s, totalSets:ex.sets, leg:null});
+          }
+        }
+      });
+    });
+    return blocks;
   }
 
-  startBtn.addEventListener('click', ()=>{
-    // Unlock speech synthesis inside this user gesture, then start the session.
-    if('speechSynthesis' in window){
-      speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+  function targetLabel(target){
+    if(target.type==='reps'){ return target.min===target.max ? (target.max+' reps') : (target.min+'–'+target.max+' reps'); }
+    if(target.type==='duration'){
+      const fmt=s=>s>=60?Math.round(s/60)+' min':s+' sec';
+      return target.min===target.max ? fmt(target.max) : fmt(target.min)+'–'+fmt(target.max);
     }
-    startCamera().then(()=>{
-      if(running){
-        speak(START_LINES[Math.floor(Math.random()*START_LINES.length)], {priority:true});
-      }
+    return 'open set';
+  }
+
+  function buildDayCards(){
+    dayGrid.innerHTML='';
+    Object.keys(PROGRAM).forEach(key=>{
+      const day=PROGRAM[key];
+      const card=document.createElement('div');
+      card.className='day-card'; card.dataset.day=key;
+      const listHtml=day.sections.map(sec=>'<li><b>'+sec.name+':</b> '+sec.exercises.map(e=>e.name).join(', ')+'</li>').join('');
+      card.innerHTML='<div class="dlabel">'+(key==='day1'?'Monday':key==='day2'?'Wednesday':'Friday')+'</div>'+
+        '<div class="dtitle">'+day.title+'</div><ul>'+listHtml+'</ul>';
+      card.addEventListener('click',()=>{
+        document.querySelectorAll('.day-card').forEach(c=>c.classList.remove('selected'));
+        card.classList.add('selected');
+        WF.day=key;
+        startWorkoutBtn.disabled=false;
+        startWorkoutBtn.textContent='Start '+day.title;
+      });
+      dayGrid.appendChild(card);
     });
-  });
-  toggleBtn.addEventListener('click', ()=>{
-    if(running){
-      if(repCount > 0){
-        speak('Session done. ' + repCount + (repCount===1?' rep. Nice work.':' reps. Nice work.'), {priority:true});
-      }
-      stopCamera();
-    }else{
-      startCamera();
+  }
+  buildDayCards();
+
+  startWorkoutBtn.addEventListener('click', async ()=>{
+    if(!WF.day) return;
+    if('speechSynthesis' in window) speechSynthesis.speak(new SpeechSynthesisUtterance(''));
+    WF.blocks=buildBlocks(WF.day); WF.idx=0; WF.log=[];
+    screenSelect.classList.add('hidden'); screenWorkout.classList.remove('hidden');
+    overlayText.textContent='Loading camera and pose model…';
+    vfOverlay.classList.remove('hidden');
+    const ok=await startCamera();
+    if(ok){
+      speak("Alright, let's get started. "+PROGRAM[WF.day].title+".",{priority:true});
+      beginBlock(0);
     }
   });
-  resetBtn.addEventListener('click', resetSession);
 
-  voiceBtn.addEventListener('click', ()=>{
-    voiceEnabled = !voiceEnabled;
-    voiceBtn.classList.toggle('active', voiceEnabled);
-    voiceBtn.textContent = voiceEnabled ? '🔊 Voice' : '🔇 Voice';
-    if(!voiceEnabled && 'speechSynthesis' in window) speechSynthesis.cancel();
-  });
-
-  tabs.forEach(tab=>{
-    tab.addEventListener('click', ()=>{
-      tabs.forEach(t=>t.classList.remove('active'));
-      tab.classList.add('active');
-      currentExKey = tab.dataset.ex;
-      exLabel.textContent = currentExKey === 'freestyle' ? 'Freestyle' : EXERCISES[currentExKey].label;
-      resetSession();
+  function currentExerciseSummaries(){
+    // unique exercises in order with total sets and done count
+    const order=[], map={};
+    WF.blocks.forEach(b=>{
+      if(!map[b.exerciseName]){ map[b.exerciseName]={name:b.exerciseName, section:b.section, total:0, done:0}; order.push(b.exerciseName); }
+      map[b.exerciseName].total++;
     });
+    WF.log.forEach(entry=>{ if(map[entry.exerciseName]) map[entry.exerciseName].done++; });
+    return order.map(n=>map[n]);
+  }
+
+  function renderProgress(){
+    const summaries=currentExerciseSummaries();
+    const currentName = WF.blocks[WF.idx] ? WF.blocks[WF.idx].exerciseName : null;
+    progressList.innerHTML='';
+    summaries.forEach(s=>{
+      const li=document.createElement('li');
+      const complete = s.done>=s.total;
+      li.className = (s.name===currentName?'current ':'') + (complete?'complete':'');
+      li.innerHTML='<span class="pname">'+s.name+'</span><span class="pcount">'+s.done+'/'+s.total+'</span>';
+      progressList.appendChild(li);
+    });
+  }
+
+  function renderNextUp(nextIdx){
+    if(nextIdx>=WF.blocks.length){ nextUp.textContent='Last block of the day — finish strong.'; return; }
+    const b=WF.blocks[nextIdx];
+    nextUp.innerHTML='<div class="nx-ex">'+b.exerciseName+(b.leg?' — '+b.leg+' Leg':'')+'</div>'+
+      '<div class="nx-meta">Set '+b.setIndex+' of '+b.totalSets+' · '+targetLabel(b.target)+'</div>';
+  }
+
+  function updateDial(fraction){ fraction=Math.min(1,Math.max(0,fraction)); dialArc.setAttribute('stroke-dashoffset', String(DIAL_CIRC*(1-fraction))); }
+  function pulseDial(){ dialArc.style.filter='drop-shadow(0 0 6px rgba(201,255,62,0.9))'; setTimeout(()=>{dialArc.style.filter='';},220); }
+  function setFeedback(msg,warn){ feedbackText.textContent=msg; feedbackBox.classList.toggle('warn',!!warn); }
+  function formatHoldTime(ms){ const t=Math.floor(ms/1000), m=Math.floor(t/60), s=t%60; return m>0?(m+':'+String(s).padStart(2,'0')):String(s); }
+
+  function beginBlock(idx){
+    if(idx>=WF.blocks.length){ finishWorkout(); return; }
+    WF.idx=idx; WF.phase='active';
+    WF.smoothedAngle=null; WF.repState='up'; WF.repCount=0; WF.holdMs=0; WF.holdLastTick=null;
+    restOverlay.classList.add('hidden');
+
+    const b=WF.blocks[idx];
+    sectionEyebrow.textContent=b.section.toUpperCase();
+    exerciseNameEl.textContent=b.exerciseName+(b.leg?' · '+b.leg+' Leg':'');
+    setLabelEl.textContent='Set '+b.setIndex+' of '+b.totalSets;
+    targetPill.textContent=targetLabel(b.target);
+    updateDial(0);
+
+    const trk=TRACKERS[b.tracker];
+    manualTapBtn.classList.toggle('hidden', trk.type!=='manual');
+    repCountEl.textContent = trk.type==='hold' ? '0:00' : '0';
+    dialUnitLabel.textContent = trk.type==='hold' ? 'held' : 'reps';
+    setFeedback(trk.type==='manual' ? 'Tap +1 Rep as you go, then complete the set.' : 'Get set…', false);
+
+    renderProgress(); renderNextUp(idx+1);
+
+    const legNote = b.leg ? (' '+b.leg+' leg.') : '';
+    speak(b.exerciseName+'.'+legNote+' '+targetLabel(b.target)+'.', {priority:true});
+  }
+
+  function processActiveBlock(kpMap){
+    const b=WF.blocks[WF.idx]; if(!b) return;
+    const trk=TRACKERS[b.tracker];
+    if(trk.type==='pose-rep') processPoseRep(kpMap,b,trk);
+    else if(trk.type==='hold') processHold(kpMap);
+    // manual: nothing to do with kpMap
+  }
+
+  function processPoseRep(kpMap,b,trk){
+    const [pA,pB,pC]=pickSide(kpMap,trk.jointSet);
+    const a=kpMap[pA], bb=kpMap[pB], c=kpMap[pC];
+    const coreScore=avgScore(kpMap,[pA,pB,pC]);
+    if(coreScore<0.35){ setLed(trackLed,false); angleReadout.textContent='—'; setFeedback('Step back so your full body is visible.',false); return; }
+    setLed(trackLed,true);
+    const raw=angleOf(a,bb,c); if(raw===null) return;
+    const s=trk.smooth||0.28;
+    WF.smoothedAngle = WF.smoothedAngle===null ? raw : (WF.smoothedAngle*(1-s)+raw*s);
+    const angle=WF.smoothedAngle;
+    angleReadout.textContent=Math.round(angle)+'°';
+
+    const t = trk.invert ? (angle-trk.downT)/(trk.upT-trk.downT) : (trk.upT-angle)/(trk.upT-trk.downT);
+    updateDial(t);
+
+    const isDownState = angle<=trk.downT, isUpState = angle>=trk.upT;
+    if(WF.repState==='up' && isDownState){
+      WF.repState='down'; setFeedback(trk.downMsg,false);
+      const fc=trk.formCheck ? trk.formCheck(angle,kpMap) : null;
+      if(fc && fc.warn){ setFeedback(fc.msg,true); speak(fc.msg,{priority:true}); }
+    }else if(WF.repState==='down' && isUpState){
+      WF.repState='up'; WF.repCount+=1; repCountEl.textContent=WF.repCount;
+      setFeedback(trk.upMsg,false); pulseDial(); announceRep(WF.repCount);
+      if(b.target.type==='reps' && WF.repCount>=b.target.max){
+        speak('That\'s your set.',{priority:true});
+        setTimeout(()=>completeCurrentSet(),400);
+      }
+    }
+  }
+
+  function processHold(kpMap){
+    const coreScore=avgScore(kpMap,['left_shoulder','right_shoulder','left_hip','right_hip']);
+    const now=performance.now();
+    if(coreScore<0.3){
+      setLed(trackLed,false); setFeedback('Get into position so I can see you.',false);
+      WF.holdLastTick=null; return;
+    }
+    setLed(trackLed,true);
+    if(WF.holdLastTick===null){ WF.holdLastTick=now; }
+    else{ WF.holdMs += now-WF.holdLastTick; WF.holdLastTick=now; }
+    repCountEl.textContent=formatHoldTime(WF.holdMs);
+    angleReadout.textContent=Math.round(WF.holdMs/1000)+'s';
+    const b=WF.blocks[WF.idx];
+    const frac = WF.holdMs/1000 / b.target.max;
+    updateDial(frac);
+    setFeedback('Hold steady — stay tight.',false);
+    if(WF.holdMs/1000 >= b.target.max){
+      speak('Time! Great hold.',{priority:true});
+      setTimeout(()=>completeCurrentSet(),400);
+    }
+  }
+
+  manualTapBtn.addEventListener('click',()=>{
+    WF.repCount+=1; repCountEl.textContent=WF.repCount; pulseDial(); announceRep(WF.repCount);
+    const b=WF.blocks[WF.idx];
+    if(b.target.type==='reps' && WF.repCount>=b.target.max){ speak('That\'s your set.',{priority:true}); }
   });
 
-  dialArc.setAttribute('stroke-dashoffset', String(DIAL_CIRC));
+  completeSetBtn.addEventListener('click', completeCurrentSet);
+
+  function completeCurrentSet(){
+    if(WF.phase!=='active') return;
+    const b=WF.blocks[WF.idx];
+    const trk=TRACKERS[b.tracker];
+    const achieved = trk.type==='hold' ? Math.round(WF.holdMs/1000) : WF.repCount;
+    WF.log.push({exerciseName:b.exerciseName, section:b.section, leg:b.leg, targetType: b.target.type==='duration'?'duration':'reps', achieved});
+    renderProgress();
+
+    const nextIdx=WF.idx+1;
+    if(nextIdx>=WF.blocks.length){ finishWorkout(); return; }
+
+    const nextBlock=WF.blocks[nextIdx];
+    const sameExercise = nextBlock.exerciseName===b.exerciseName && nextBlock.leg===b.leg ? false : (nextBlock.exerciseName===b.exerciseName);
+    const restSec = trk.type==='hold' ? 60 : 45;
+    startRest(restSec, nextIdx);
+  }
+
+  function startRest(seconds, nextIdx){
+    WF.phase='rest'; WF.restRemaining=seconds;
+    restOverlay.classList.remove('hidden');
+    restTime.textContent=WF.restRemaining;
+    const nb=WF.blocks[nextIdx];
+    restNext.textContent='Up next: '+nb.exerciseName+(nb.leg?' ('+nb.leg+' leg)':'');
+    speak('Rest, '+seconds+' seconds.',{priority:true});
+    if(WF.restTimerId) clearInterval(WF.restTimerId);
+    WF.restTimerId=setInterval(()=>{
+      WF.restRemaining-=1;
+      restTime.textContent=Math.max(0,WF.restRemaining);
+      if(WF.restRemaining===3||WF.restRemaining===2||WF.restRemaining===1) speak(String(WF.restRemaining),{priority:true});
+      if(WF.restRemaining<=0){
+        clearInterval(WF.restTimerId);
+        beginBlock(nextIdx);
+      }
+    },1000);
+  }
+
+  skipRestBtn.addEventListener('click',()=>{
+    if(WF.restTimerId) clearInterval(WF.restTimerId);
+    const nextIdx=WF.idx+1;
+    beginBlock(nextIdx);
+  });
+
+  endWorkoutBtn.addEventListener('click',()=>{ if(WF.restTimerId) clearInterval(WF.restTimerId); finishWorkout(); });
+
+  function finishWorkout(){
+    WF.phase='done';
+    if(WF.restTimerId) clearInterval(WF.restTimerId);
+    stopCamera();
+    screenWorkout.classList.add('hidden'); screenSummary.classList.remove('hidden');
+
+    // best set per exercise
+    const best={};
+    WF.log.forEach(e=>{
+      if(!best[e.exerciseName] || e.achieved>best[e.exerciseName].achieved) best[e.exerciseName]={achieved:e.achieved, type:e.targetType};
+    });
+    const setsCount={};
+    WF.log.forEach(e=>{ setsCount[e.exerciseName]=(setsCount[e.exerciseName]||0)+1; });
+
+    summaryBody.innerHTML='';
+    Object.keys(best).forEach(name=>{
+      const tr=document.createElement('tr');
+      const b=best[name];
+      const bestStr = b.type==='duration' ? formatHoldTime(b.achieved*1000)+' held' : b.achieved+' reps';
+      tr.innerHTML='<td>'+name+'</td><td>'+(setsCount[name]||0)+'</td><td class="best">'+bestStr+'</td>';
+      summaryBody.appendChild(tr);
+    });
+
+    goalsList.innerHTML='';
+    let hitCount=0;
+    GOALS.forEach(g=>{
+      const b=best[g.exercise];
+      const achieved = b ? b.achieved : 0;
+      const hit = achieved>=g.value;
+      if(hit) hitCount++;
+      const row=document.createElement('div');
+      row.className='goal-row';
+      row.innerHTML='<span>'+g.label+'</span><span class="g-status '+(hit?'hit':'miss')+'">'+(hit?'Hit — '+achieved:('Best: '+achieved))+'</span>';
+      goalsList.appendChild(row);
+    });
+
+    summaryLede.textContent = WF.log.length>0
+      ? 'You completed '+WF.log.length+' sets across '+Object.keys(best).length+' exercises.'
+      : 'No sets logged this session.';
+    speak('Session complete. '+hitCount+' of '+GOALS.length+' benchmark goals hit so far. Solid work.',{priority:true});
+  }
+
+  restartBtn.addEventListener('click',()=>{
+    screenSummary.classList.add('hidden'); screenSelect.classList.remove('hidden');
+    document.querySelectorAll('.day-card').forEach(c=>c.classList.remove('selected'));
+    WF.day=null; startWorkoutBtn.disabled=true; startWorkoutBtn.textContent='Select a day to begin';
+  });
+
 })();
 </script>
 </body>
